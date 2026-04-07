@@ -101,4 +101,101 @@ public class AuthServiceTests
         Assert.Equal("access-token", accessToken);
         Assert.Equal("refresh-token", refreshToken);
     }
+
+    [Fact]
+    public async Task LoginAsync_AfterFiveFailedAttempts_LocksAccount()
+    {
+        using var db = TestDbContextFactory.Create();
+        var service = new AuthService(db, _tokenServiceMock.Object);
+
+        await service.RegisterAsync(new RegisterRequest
+        {
+            Email = "lockout@example.com",
+            Password = "CorrectPassword!",
+            DisplayName = "User",
+        });
+
+        // Fail login 5 times
+        for (var i = 0; i < 5; i++)
+        {
+            await Assert.ThrowsAsync<UnauthorizedAccessException>(() =>
+                service.LoginAsync(new LoginRequest
+                {
+                    Email = "lockout@example.com",
+                    Password = "WrongPassword!",
+                }));
+        }
+
+        // 6th attempt should throw with lockout message
+        var ex = await Assert.ThrowsAsync<UnauthorizedAccessException>(() =>
+            service.LoginAsync(new LoginRequest
+            {
+                Email = "lockout@example.com",
+                Password = "WrongPassword!",
+            }));
+
+        Assert.Contains("locked", ex.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task LoginAsync_WithLockedAccount_ThrowsUnauthorizedAccessException()
+    {
+        using var db = TestDbContextFactory.Create();
+        var service = new AuthService(db, _tokenServiceMock.Object);
+
+        // Create user directly with lockout set
+        var user = new User
+        {
+            Email = "locked@example.com",
+            PasswordHash = BCrypt.Net.BCrypt.HashPassword("Password123!"),
+            DisplayName = "Locked User",
+            LockoutUntil = DateTime.UtcNow.AddMinutes(15),
+        };
+        db.Users.Add(user);
+        await db.SaveChangesAsync();
+
+        var ex = await Assert.ThrowsAsync<UnauthorizedAccessException>(() =>
+            service.LoginAsync(new LoginRequest
+            {
+                Email = "locked@example.com",
+                Password = "Password123!",
+            }));
+
+        Assert.Contains("locked", ex.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task LoginAsync_SuccessfulLogin_ResetsFailedAttempts()
+    {
+        using var db = TestDbContextFactory.Create();
+        var service = new AuthService(db, _tokenServiceMock.Object);
+
+        _tokenServiceMock
+            .Setup(t => t.GenerateAccessToken(It.IsAny<User>()))
+            .Returns("access-token");
+
+        _tokenServiceMock
+            .Setup(t => t.CreateRefreshTokenAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new RefreshToken { TokenHash = "refresh-token", ExpiresAt = DateTime.UtcNow.AddDays(7) });
+
+        // Create user with pre-existing failed attempts
+        var user = new User
+        {
+            Email = "resetattempts@example.com",
+            PasswordHash = BCrypt.Net.BCrypt.HashPassword("Password123!"),
+            DisplayName = "User",
+            FailedLoginAttempts = 3,
+        };
+        db.Users.Add(user);
+        await db.SaveChangesAsync();
+
+        await service.LoginAsync(new LoginRequest
+        {
+            Email = "resetattempts@example.com",
+            Password = "Password123!",
+        });
+
+        var savedUser = await db.Users.FindAsync(user.Id);
+        Assert.Equal(0, savedUser!.FailedLoginAttempts);
+    }
 }

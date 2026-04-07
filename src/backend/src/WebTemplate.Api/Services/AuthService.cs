@@ -14,8 +14,21 @@ public class AuthService(AppDbContext db, ITokenService tokenService) : IAuthSer
         var user = await db.Users.FirstOrDefaultAsync(u => u.Email == request.Email, ct)
             ?? throw new UnauthorizedAccessException("Invalid email or password.");
 
+        if (user.LockoutUntil > DateTime.UtcNow)
+            throw new UnauthorizedAccessException("Account is temporarily locked. Try again later.");
+
         if (!BCrypt.Net.BCrypt.Verify(request.Password, user.PasswordHash))
+        {
+            user.FailedLoginAttempts++;
+            if (user.FailedLoginAttempts >= 5)
+                user.LockoutUntil = DateTime.UtcNow.AddMinutes(15);
+            await db.SaveChangesAsync(ct);
             throw new UnauthorizedAccessException("Invalid email or password.");
+        }
+
+        user.FailedLoginAttempts = 0;
+        user.LockoutUntil = null;
+        await db.SaveChangesAsync(ct);
 
         var accessToken = tokenService.GenerateAccessToken(user);
         var refreshTokenEntity = await tokenService.CreateRefreshTokenAsync(user.Id, ct);

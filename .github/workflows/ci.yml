@@ -65,6 +65,17 @@ jobs:
       - name: Test
         run: dotnet test WebTemplate.sln --no-build -c Release --verbosity normal --collect:"XPlat Code Coverage"
 
+  secrets-scan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Scan for secrets
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
   k8s-lint:
     name: K8S Manifest Lint
     runs-on: ubuntu-latest
