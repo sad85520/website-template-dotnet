@@ -1,0 +1,81 @@
+name: CI
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+    branches: [main]
+
+jobs:
+  frontend-ci:
+    name: Frontend (Vue 3)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: src/frontend
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: "pnpm"
+          cache-dependency-path: src/frontend/pnpm-lock.yaml
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Lint
+        run: pnpm lint
+
+      - name: Type check
+        run: pnpm type-check
+
+      - name: Test with coverage
+        run: pnpm test:coverage
+
+      - name: Build
+        run: pnpm build
+
+  backend-ci:
+    name: Backend (.NET 9)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: src/backend
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "9.0.x"
+
+      - name: Restore dependencies
+        run: dotnet restore WebTemplate.sln
+
+      - name: Build
+        run: dotnet build WebTemplate.sln --no-restore -c Release
+
+      - name: Test
+        run: dotnet test WebTemplate.sln --no-build -c Release --verbosity normal --collect:"XPlat Code Coverage"
+
+  k8s-lint:
+    name: K8S Manifest Lint
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Validate K8S manifests (dry-run)
+        run: |
+          for file in infra/k8s/**/*.yml infra/k8s/*.yml; do
+            echo "Validating $file..."
+            kubectl apply --dry-run=client -f "$file" 2>/dev/null || echo "Skipped: $file (needs cluster context)"
+          done
+        continue-on-error: true

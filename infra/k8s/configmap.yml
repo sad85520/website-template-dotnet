@@ -1,0 +1,9 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: app-config
+  namespace: web-template
+data:
+  ASPNETCORE_ENVIRONMENT: "Production"
+  Jwt__Issuer: "WebTemplate"
+  Jwt__Audience: "WebTemplate"

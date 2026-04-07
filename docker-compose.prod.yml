@@ -1,0 +1,18 @@
+services:
+  backend:
+    build:
+      context: ./src/backend
+      dockerfile: src/WebTemplate.Api/Dockerfile
+    volumes: []
+    environment:
+      ASPNETCORE_ENVIRONMENT: Production
+
+  frontend:
+    build:
+      context: ./src/frontend
+      dockerfile: Dockerfile
+    volumes: []
+
+  nginx:
+    volumes:
+      - ./infra/nginx/nginx.conf:/etc/nginx/nginx.conf:ro

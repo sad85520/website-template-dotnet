@@ -1,0 +1,45 @@
+# ========== Environment Variables ==========
+.env
+.env.local
+.env.*.local
+src/frontend/.env.development
+src/frontend/.env.production
+
+# ========== Frontend ==========
+src/frontend/node_modules/
+src/frontend/dist/
+src/frontend/.vite/
+src/frontend/coverage/
+src/frontend/*.local
+
+# ========== Backend ==========
+src/backend/**/bin/
+src/backend/**/obj/
+src/backend/**/*.user
+src/backend/**/*.suo
+src/backend/.vs/
+src/backend/**/appsettings.Development.json
+src/backend/**/appsettings.Production.json
+
+# ========== Docker ==========
+infra/nginx/ssl/*.pem
+infra/nginx/ssl/*.crt
+infra/nginx/ssl/*.key
+
+# ========== K8S Secrets ==========
+infra/k8s/secret.yml
+
+# ========== OS ==========
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# ========== IDE ==========
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# ========== Logs ==========
+logs/
+*.log
