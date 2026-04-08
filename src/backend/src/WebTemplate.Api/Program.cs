@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using NetEscapades.AspNetCore.SecurityHeaders;
 using Serilog;
 using WebTemplate.Api.Data;
 using WebTemplate.Api.Extensions;
@@ -21,6 +22,9 @@ try
     // Services
     builder.Services.AddControllers();
     builder.Services.AddEndpointsApiExplorer();
+
+    builder.Services.AddExceptionHandler<GlobalExceptionHandler>();
+    builder.Services.AddProblemDetails();
 
     builder.Services.AddDatabase(builder.Configuration);
     builder.Services.AddJwtAuthentication(builder.Configuration);
@@ -55,7 +59,21 @@ try
     }
 
     // Middleware pipeline
-    app.UseMiddleware<ExceptionHandlingMiddleware>();
+    app.UseSecurityHeaders(policies => policies
+        .AddDefaultSecurityHeaders()
+        .AddContentSecurityPolicy(csp =>
+        {
+            csp.AddDefaultSrc().None();
+            csp.AddObjectSrc().None();
+            csp.AddScriptSrc().Self().UnsafeInline(); // Swagger UI requires inline scripts
+            csp.AddStyleSrc().Self().UnsafeInline();  // Swagger UI requires inline styles
+            csp.AddImgSrc().Self().Data();
+            csp.AddFontSrc().Self();
+            csp.AddConnectSrc().Self();
+            csp.AddFrameAncestors().None();
+        }));
+
+    app.UseExceptionHandler();
     app.UseSerilogRequestLogging();
 
     if (app.Environment.IsDevelopment())
