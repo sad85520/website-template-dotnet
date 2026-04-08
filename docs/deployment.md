@@ -46,11 +46,25 @@ kubectl get pods -n web-template
 kubectl get services -n web-template
 ```
 
-### 更新部署
+### CD 部署流程
 
-CD pipeline 會在 merge to main 後自動更新 K8S manifests 中的 image tag。
+| 階段 | 觸發方式 | Workflow |
+|------|---------|---------|
+| Staging | push to main 自動觸發 | `cd.yml` |
+| Production | 手動觸發（QA 驗收通過後） | `cd-production.yml` |
 
-手動更新：
+**手動觸發 Production 部署：**
+```bash
+# 指定 SHA（推薦，確保部署正確版本）
+gh workflow run cd-production.yml -f sha=<short-sha>
+
+# 使用最新版本
+gh workflow run cd-production.yml
+```
+
+也可在 GitHub Actions 頁面 → 選擇「CD — Deploy Production」→ 點「Run workflow」。
+
+手動更新 K8S image：
 ```bash
 kubectl set image deployment/backend backend=ghcr.io/your-org/website-template-dotnet/backend:sha-abc1234 -n web-template
 kubectl set image deployment/frontend frontend=ghcr.io/your-org/website-template-dotnet/frontend:sha-abc1234 -n web-template

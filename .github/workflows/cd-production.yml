@@ -1,0 +1,56 @@
+name: CD — Deploy Production
+
+# Production deployment is triggered manually after QA sign-off.
+# Trigger via GitHub Actions UI or CLI:
+#   gh workflow run cd-production.yml -f sha=<short-sha>
+#
+# If sha input is omitted, the latest image (tagged "latest") is used.
+
+on:
+  workflow_dispatch:
+    inputs:
+      sha:
+        description: 'Short SHA to deploy (e.g. a1b2c3d). Leave empty to use latest.'
+        required: false
+        type: string
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_PREFIX: ${{ github.repository }}
+
+jobs:
+  deploy-production:
+    name: Deploy to Production
+    runs-on: ubuntu-latest
+    environment: production
+    permissions:
+      contents: write
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          ref: main
+
+      - name: Resolve image tag
+        id: tag
+        run: |
+          if [ -n "${{ inputs.sha }}" ]; then
+            echo "tag=sha-${{ inputs.sha }}" >> $GITHUB_OUTPUT
+          else
+            echo "tag=latest" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Update image tags in production K8S manifests
+        run: |
+          TAG="${{ steps.tag.outputs.tag }}"
+          sed -i "s|image: ghcr.io/.*/frontend:.*|image: ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}/frontend:${TAG}|g" infra/k8s/frontend/deployment.yml
+          sed -i "s|image: ghcr.io/.*/backend:.*|image: ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}/backend:${TAG}|g" infra/k8s/backend/deployment.yml
+
+      - name: Commit updated production manifests
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add infra/k8s/
+          git diff --staged --quiet || git commit -m "chore: promote ${{ steps.tag.outputs.tag }} to production"
+          git push
