@@ -13,7 +13,7 @@
               /        │      │  /api/*
      ┌────────▼───┐    │  ┌───▼────────────┐
      │  Frontend  │    │  │    Backend     │
-     │  (Vue SPA) │    │  │  (.NET 9 API)  │
+     │  (Vue SPA) │    │  │  (.NET 10 API) │
      │  port 80   │    │  │   port 8080    │
      └────────────┘    │  └───────┬────────┘
                        │          │
@@ -30,7 +30,9 @@
 ```
 HTTP Request
     ↓
-ExceptionHandlingMiddleware  ← 全域例外攔截
+SecurityHeadersMiddleware    ← 安全標頭（CSP, HSTS, X-Frame-Options...）
+    ↓
+GlobalExceptionHandler       ← 全域例外攔截（IExceptionHandler）
     ↓
 RateLimiterMiddleware        ← 速率限制
     ↓

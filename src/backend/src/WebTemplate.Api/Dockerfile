@@ -1,5 +1,5 @@
 # ---- Restore Stage ----
-FROM mcr.microsoft.com/dotnet/sdk:9.0 AS restore
+FROM mcr.microsoft.com/dotnet/sdk:10.0 AS restore
 WORKDIR /src
 COPY src/WebTemplate.Api/WebTemplate.Api.csproj src/WebTemplate.Api/
 RUN dotnet restore src/WebTemplate.Api/WebTemplate.Api.csproj
@@ -14,7 +14,7 @@ FROM build AS publish
 RUN dotnet publish src/WebTemplate.Api/WebTemplate.Api.csproj -c Release --no-build -o /app/publish
 
 # ---- Runtime Stage ----
-FROM mcr.microsoft.com/dotnet/aspnet:9.0 AS runtime
+FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS runtime
 WORKDIR /app
 COPY --from=publish /app/publish .
 

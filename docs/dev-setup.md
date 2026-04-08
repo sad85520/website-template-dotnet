@@ -10,7 +10,7 @@
 
 可選（本地開發不透過 Docker）：
 - Node.js 22+, pnpm 9+
-- .NET SDK 9.0+
+- .NET SDK 10.0+
 
 ## 快速啟動
 
@@ -23,10 +23,13 @@ cd website-template-dotnet
 cp .env.example .env
 # 編輯 .env，至少修改 DB_PASSWORD 和 JWT_SECRET
 
-# 3. 啟動服務（首次較慢，需要 pull images）
+# 3. 初始化前端 lockfile（首次，確保 CI --frozen-lockfile 可正常運行）
+cd src/frontend && pnpm install && cd ../..
+
+# 4. 啟動服務（首次較慢，需要 pull images）
 make dev-build
 
-# 4. 套用 DB Migration（另開終端）
+# 5. 套用 DB Migration（另開終端）
 make migrate
 ```
 

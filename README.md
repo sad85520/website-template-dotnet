@@ -6,8 +6,8 @@
 
 | 層級 | 技術 |
 |------|------|
-| 前端 | Vue 3, TypeScript, Vite, Vue Router 4, Pinia, Tailwind CSS, Axios |
-| 後端 | .NET 9, ASP.NET Core Web API, Entity Framework Core |
+| 前端 | Vue 3, TypeScript, Vite, Vue Router 4, Pinia, Tailwind CSS v4, Axios, Zod |
+| 後端 | .NET 10, ASP.NET Core Web API, Entity Framework Core |
 | 資料庫 | MSSQL 2022 |
 | 認證 | JWT + Refresh Token (httpOnly cookie) |
 | API 文件 | Swagger / OpenAPI (Swashbuckle) |
@@ -47,7 +47,7 @@ make migrate
 website-template-dotnet/
 ├── src/
 │   ├── frontend/              # Vue 3 前端
-│   └── backend/               # .NET 9 後端
+│   └── backend/               # .NET 10 後端
 │       ├── src/WebTemplate.Api/   # Web API 專案
 │       │   ├── Controllers/       # 路由與 HTTP 處理
 │       │   ├── Services/          # 商業邏輯
