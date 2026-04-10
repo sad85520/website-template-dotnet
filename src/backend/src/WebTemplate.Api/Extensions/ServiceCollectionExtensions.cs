@@ -64,7 +64,7 @@ public static class ServiceCollectionExtensions
             {
                 document.Info = new() { Title = "WebTemplate API", Version = "v1" };
                 document.Components ??= new OpenApiComponents();
-                document.Components.SecuritySchemes ??= new Dictionary<string, OpenApiSecurityScheme>();
+                document.Components.SecuritySchemes ??= new Dictionary<string, IOpenApiSecurityScheme>();
                 document.Components.SecuritySchemes["Bearer"] = new OpenApiSecurityScheme
                 {
                     Type = SecuritySchemeType.Http,
