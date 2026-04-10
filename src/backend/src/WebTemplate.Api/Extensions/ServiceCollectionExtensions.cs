@@ -5,6 +5,7 @@ using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi;
+using Microsoft.OpenApi.References;
 using Microsoft.AspNetCore.OpenApi;
 using WebTemplate.Api.Data;
 using WebTemplate.Api.Models.Settings;
@@ -63,7 +64,8 @@ public static class ServiceCollectionExtensions
             options.AddDocumentTransformer((document, context, cancellationToken) =>
             {
                 document.Info = new() { Title = "WebTemplate API", Version = "v1" };
-                document.Components ??= new();
+                document.Components ??= new OpenApiComponents();
+                document.Components.SecuritySchemes ??= new Dictionary<string, OpenApiSecurityScheme>();
                 document.Components.SecuritySchemes["Bearer"] = new OpenApiSecurityScheme
                 {
                     Type = SecuritySchemeType.Http,
@@ -79,14 +81,7 @@ public static class ServiceCollectionExtensions
                 operation.Security ??= [];
                 operation.Security.Add(new OpenApiSecurityRequirement
                 {
-                    [new OpenApiSecurityScheme
-                    {
-                        Reference = new OpenApiReference
-                        {
-                            Type = ReferenceType.SecurityScheme,
-                            Id = "Bearer",
-                        }
-                    }] = []
+                    [new OpenApiSecuritySchemeReference("Bearer")] = []
                 });
                 return Task.CompletedTask;
             });
