@@ -116,10 +116,6 @@ try
 
     await app.RunAsync();
 }
-static bool IsDevUiPath(HttpContext ctx) =>
-    ctx.Request.Path.StartsWithSegments("/scalar") ||
-    ctx.Request.Path.StartsWithSegments("/openapi");
-
 catch (Exception ex) when(ex is not HostAbortedException)
 {
     Log.Fatal(ex, "Application terminated unexpectedly");
@@ -128,3 +124,7 @@ finally
 {
     Log.CloseAndFlush();
 }
+
+static bool IsDevUiPath(HttpContext ctx) =>
+    ctx.Request.Path.StartsWithSegments("/scalar") ||
+    ctx.Request.Path.StartsWithSegments("/openapi");
