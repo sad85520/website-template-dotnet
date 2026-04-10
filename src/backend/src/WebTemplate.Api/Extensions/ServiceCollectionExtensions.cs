@@ -5,6 +5,7 @@ using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
+using Microsoft.AspNetCore.OpenApi;
 using WebTemplate.Api.Data;
 using WebTemplate.Api.Models.Settings;
 using WebTemplate.Api.Services;
@@ -55,29 +56,39 @@ public static class ServiceCollectionExtensions
         return services;
     }
 
-    public static IServiceCollection AddSwaggerWithJwt(this IServiceCollection services)
+    public static IServiceCollection AddOpenApiWithJwt(this IServiceCollection services)
     {
-        services.AddSwaggerGen(options =>
+        services.AddOpenApi(options =>
         {
-            options.SwaggerDoc("v1", new OpenApiInfo { Title = "WebTemplate API", Version = "v1" });
-            options.AddSecurityDefinition("Bearer", new OpenApiSecurityScheme
+            options.AddDocumentTransformer((document, context, cancellationToken) =>
             {
-                In = ParameterLocation.Header,
-                Description = "Enter: Bearer {token}",
-                Name = "Authorization",
-                Type = SecuritySchemeType.Http,
-                BearerFormat = "JWT",
-                Scheme = "bearer",
-            });
-            options.AddSecurityRequirement(new OpenApiSecurityRequirement
-            {
+                document.Info = new() { Title = "WebTemplate API", Version = "v1" };
+                document.Components ??= new();
+                document.Components.SecuritySchemes["Bearer"] = new OpenApiSecurityScheme
                 {
-                    new OpenApiSecurityScheme
+                    Type = SecuritySchemeType.Http,
+                    Scheme = "bearer",
+                    BearerFormat = "JWT",
+                    Description = "Enter JWT token",
+                };
+                return Task.CompletedTask;
+            });
+
+            options.AddOperationTransformer((operation, context, cancellationToken) =>
+            {
+                operation.Security ??= [];
+                operation.Security.Add(new OpenApiSecurityRequirement
+                {
+                    [new OpenApiSecurityScheme
                     {
-                        Reference = new OpenApiReference { Type = ReferenceType.SecurityScheme, Id = "Bearer" }
-                    },
-                    []
-                }
+                        Reference = new OpenApiReference
+                        {
+                            Type = ReferenceType.SecurityScheme,
+                            Id = "Bearer",
+                        }
+                    }] = []
+                });
+                return Task.CompletedTask;
             });
         });
 

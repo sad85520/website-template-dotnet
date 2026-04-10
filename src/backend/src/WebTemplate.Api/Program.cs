@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using NetEscapades.AspNetCore.SecurityHeaders;
+using Scalar.AspNetCore;
 using Serilog;
 using WebTemplate.Api.Data;
 using WebTemplate.Api.Extensions;
@@ -29,7 +30,7 @@ try
     builder.Services.AddDatabase(builder.Configuration);
     builder.Services.AddJwtAuthentication(builder.Configuration);
     builder.Services.AddApplicationServices();
-    builder.Services.AddSwaggerWithJwt();
+    builder.Services.AddOpenApiWithJwt();
     builder.Services.AddRateLimiting();
 
     builder.Services.AddHealthChecks()
@@ -59,30 +60,51 @@ try
     }
 
     // Middleware pipeline
-    app.UseSecurityHeaders(policies => policies
-        .AddDefaultSecurityHeaders()
-        .AddContentSecurityPolicy(csp =>
-        {
-            csp.AddDefaultSrc().None();
-            csp.AddObjectSrc().None();
-            csp.AddScriptSrc().Self().UnsafeInline(); // Swagger UI requires inline scripts
-            csp.AddStyleSrc().Self().UnsafeInline();  // Swagger UI requires inline styles
-            csp.AddImgSrc().Self().Data();
-            csp.AddFontSrc().Self();
-            csp.AddConnectSrc().Self();
-            csp.AddFrameAncestors().None();
-        }));
+    // 嚴格 CSP：套用於所有非 Scalar/OpenAPI 路徑
+    app.UseWhen(
+        ctx => !IsDevUiPath(ctx),
+        branch => branch.UseSecurityHeaders(policies => policies
+            .AddDefaultSecurityHeaders()
+            .AddContentSecurityPolicy(csp =>
+            {
+                csp.AddDefaultSrc().None();
+                csp.AddObjectSrc().None();
+                csp.AddScriptSrc().None();
+                csp.AddStyleSrc().None();
+                csp.AddImgSrc().Self().Data();
+                csp.AddFontSrc().None();
+                csp.AddConnectSrc().Self();
+                csp.AddFrameAncestors().None();
+            })));
+
+    // Scalar 專用 CSP：僅開發環境，允許 jsdelivr CDN
+    if (app.Environment.IsDevelopment())
+    {
+        app.UseWhen(
+            IsDevUiPath,
+            branch => branch.UseSecurityHeaders(policies => policies
+                .AddDefaultSecurityHeaders()
+                .AddContentSecurityPolicy(csp =>
+                {
+                    csp.AddDefaultSrc().None();
+                    csp.AddScriptSrc().From("https://cdn.jsdelivr.net").UnsafeInline();
+                    csp.AddStyleSrc().From("https://cdn.jsdelivr.net").UnsafeInline();
+                    csp.AddImgSrc().Self().Data().Https();
+                    csp.AddFontSrc().From("https://cdn.jsdelivr.net");
+                    csp.AddConnectSrc().Self();
+                    csp.AddFrameAncestors().None();
+                })));
+    }
 
     app.UseExceptionHandler();
     app.UseSerilogRequestLogging();
 
     if (app.Environment.IsDevelopment())
     {
-        app.UseSwagger(c => c.RouteTemplate = "api/swagger/{documentName}/swagger.json");
-        app.UseSwaggerUI(c =>
+        app.MapOpenApi();
+        app.MapScalarApiReference(options =>
         {
-            c.SwaggerEndpoint("/api/swagger/v1/swagger.json", "WebTemplate API v1");
-            c.RoutePrefix = "api/swagger";
+            options.Title = "WebTemplate API";
         });
         app.UseCors();
     }
@@ -94,6 +116,10 @@ try
 
     await app.RunAsync();
 }
+static bool IsDevUiPath(HttpContext ctx) =>
+    ctx.Request.Path.StartsWithSegments("/scalar") ||
+    ctx.Request.Path.StartsWithSegments("/openapi");
+
 catch (Exception ex) when (ex is not HostAbortedException)
 {
     Log.Fatal(ex, "Application terminated unexpectedly");
