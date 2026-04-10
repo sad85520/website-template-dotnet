@@ -89,7 +89,7 @@ try
                     csp.AddDefaultSrc().None();
                     csp.AddScriptSrc().From("https://cdn.jsdelivr.net").UnsafeInline();
                     csp.AddStyleSrc().From("https://cdn.jsdelivr.net").UnsafeInline();
-                    csp.AddImgSrc().Self().Data().Https();
+                    csp.AddImgSrc().Self().Data().From("https:");
                     csp.AddFontSrc().From("https://cdn.jsdelivr.net");
                     csp.AddConnectSrc().Self();
                     csp.AddFrameAncestors().None();
@@ -120,7 +120,7 @@ static bool IsDevUiPath(HttpContext ctx) =>
     ctx.Request.Path.StartsWithSegments("/scalar") ||
     ctx.Request.Path.StartsWithSegments("/openapi");
 
-catch (Exception ex) when (ex is not HostAbortedException)
+catch (Exception ex) when(ex is not HostAbortedException)
 {
     Log.Fatal(ex, "Application terminated unexpectedly");
 }
