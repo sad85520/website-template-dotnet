@@ -67,7 +67,9 @@ public class TokenService(AppDbContext db, IOptions<JwtSettings> jwtOptions) : I
         db.RefreshTokens.Add(refreshToken);
         await db.SaveChangesAsync(ct);
 
-        // 回傳 raw token，讓 caller 存到 cookie
+        // Detach before mutating so the DB record retains the hash;
+        // the returned object carries the raw token for the caller to set as a cookie.
+        db.Entry(refreshToken).State = EntityState.Detached;
         refreshToken.TokenHash = rawToken;
         return refreshToken;
     }
