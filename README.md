@@ -307,12 +307,17 @@ make migrate
 ### 寫測試
 
 ```bash
-# 執行所有後端測試
+# 執行所有測試（後端 + 前端）
 make test
 
-# 只跑後端（不跑前端）
+# 只跑後端
 docker compose exec backend dotnet test
+
+# 只跑前端
+cd src/frontend && pnpm test
 ```
+
+#### 後端測試
 
 測試放在 `src/backend/tests/WebTemplate.Api.Tests/`，參考現有的 `AuthServiceTests.cs` 作為範本：
 
@@ -336,10 +341,39 @@ public class ProductServiceTests
 }
 ```
 
-**原則：**
-- 測試 Service 層邏輯，Repository 用 Mock 取代
-- Repository 若需測試，使用整合測試（`WebApplicationFactory`）
-- 一個 `[Fact]` 只驗一件事
+**測試分層原則：**
+
+| 測試對象 | 測試方式 | 原因 |
+|---------|---------|------|
+| Service | Unit test（Mock Repository） | 業務邏輯在此，直接驗最有價值 |
+| Repository | 整合測試（In-memory DB） | 純資料存取邏輯，Mock 掉反而失去意義 |
+| Controller | 整合測試（`WebApplicationFactory`） | Controller 是薄的 HTTP 層，應測 routing、auth、middleware 的整體行為，而非 mock 後測呼叫順序 |
+
+一個 `[Fact]` 只驗一件事。
+
+#### 前端測試
+
+```bash
+cd src/frontend
+pnpm test        # 執行一次
+pnpm test:watch  # 監看模式
+```
+
+測試放在 `src/frontend/tests/`，目錄結構鏡像 `src/` 下的程式碼位置：
+
+```
+tests/
+├── setup.ts                    # 測試環境初始化
+└── unit/
+    └── stores/                 # 對應 src/stores/
+        └── auth.test.ts
+# 未來依需求建立：
+# unit/api/          對應 src/api/（Axios client 行為）
+# unit/composables/  對應 src/composables/（組合式函式邏輯）
+# components/auth/   對應 src/components/auth/（@vue/test-utils render 測試）
+```
+
+> 測試目錄依需求新增，不預先建立空目錄。
 
 ---
 
