@@ -29,6 +29,8 @@ public class UsersController(IUserService userService) : ControllerBase
         return Ok(ApiResponse<UserDto>.Ok(user));
     }
 
+    // GetAll 及 GetById 僅限 Admin 角色存取；
+    // 即使一般使用者持有有效 JWT，授權框架也會在此層拒絕，不會進入 service 層。
     [HttpGet]
     [Authorize(Roles = "Admin")]
     public async Task<IActionResult> GetAll(
