@@ -44,7 +44,9 @@ Controller                   ← HTTP 關注點（路由、參數、回傳）
     ↓
 Service                      ← 商業邏輯
     ↓
-AppDbContext (EF Core)       ← 資料存取
+Repository                   ← 資料存取抽象（IRepository）
+    ↓
+AppDbContext (EF Core)       ← ORM 實作
     ↓
 MSSQL
 ```

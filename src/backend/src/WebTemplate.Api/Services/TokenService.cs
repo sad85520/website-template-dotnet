@@ -2,17 +2,16 @@ using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
 using System.Security.Cryptography;
 using System.Text;
-using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 using Microsoft.IdentityModel.Tokens;
-using WebTemplate.Api.Data;
 using WebTemplate.Api.Models.Entities;
 using WebTemplate.Api.Models.Settings;
+using WebTemplate.Api.Repositories;
 using WebTemplate.Api.Services.Interfaces;
 
 namespace WebTemplate.Api.Services;
 
-public class TokenService(AppDbContext db, IOptions<JwtSettings> jwtOptions) : ITokenService
+public class TokenService(IRefreshTokenRepository refreshTokenRepository, IOptions<JwtSettings> jwtOptions) : ITokenService
 {
     private readonly JwtSettings _jwt = jwtOptions.Value;
 
@@ -49,9 +48,7 @@ public class TokenService(AppDbContext db, IOptions<JwtSettings> jwtOptions) : I
     public async Task<RefreshToken?> GetActiveRefreshTokenAsync(string rawToken, CancellationToken ct = default)
     {
         var tokenHash = HashToken(rawToken);
-        return await db.RefreshTokens
-            .Include(r => r.User)
-            .FirstOrDefaultAsync(r => r.TokenHash == tokenHash, ct);
+        return await refreshTokenRepository.FindActiveByHashAsync(tokenHash, ct);
     }
 
     public async Task<RefreshToken> CreateRefreshTokenAsync(Guid userId, CancellationToken ct = default)
@@ -64,34 +61,20 @@ public class TokenService(AppDbContext db, IOptions<JwtSettings> jwtOptions) : I
             ExpiresAt = DateTime.UtcNow.AddDays(_jwt.RefreshTokenExpirationDays),
         };
 
-        db.RefreshTokens.Add(refreshToken);
-        await db.SaveChangesAsync(ct);
+        await refreshTokenRepository.CreateAsync(refreshToken, ct);
 
         // Detach before mutating so the DB record retains the hash;
         // the returned object carries the raw token for the caller to set as a cookie.
-        db.Entry(refreshToken).State = EntityState.Detached;
+        refreshTokenRepository.Detach(refreshToken);
         refreshToken.TokenHash = rawToken;
         return refreshToken;
     }
 
-    public async Task RevokeRefreshTokenAsync(RefreshToken token, string? replacedByToken = null, CancellationToken ct = default)
-    {
-        token.RevokedAt = DateTime.UtcNow;
-        token.ReplacedByToken = replacedByToken;
-        await db.SaveChangesAsync(ct);
-    }
+    public Task RevokeRefreshTokenAsync(RefreshToken token, string? replacedByToken = null, CancellationToken ct = default)
+        => refreshTokenRepository.RevokeAsync(token, replacedByToken, ct);
 
-    public async Task RevokeAllUserRefreshTokensAsync(Guid userId, CancellationToken ct = default)
-    {
-        var tokens = await db.RefreshTokens
-            .Where(r => r.UserId == userId && r.RevokedAt == null)
-            .ToListAsync(ct);
-
-        foreach (var token in tokens)
-            token.RevokedAt = DateTime.UtcNow;
-
-        await db.SaveChangesAsync(ct);
-    }
+    public Task RevokeAllUserRefreshTokensAsync(Guid userId, CancellationToken ct = default)
+        => refreshTokenRepository.RevokeAllForUserAsync(userId, ct);
 
     private static string HashToken(string token)
     {

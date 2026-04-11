@@ -4,6 +4,7 @@ using System.Text;
 using Microsoft.Extensions.Options;
 using WebTemplate.Api.Models.Entities;
 using WebTemplate.Api.Models.Settings;
+using WebTemplate.Api.Repositories;
 using WebTemplate.Api.Services;
 using WebTemplate.Api.Tests.Helpers;
 
@@ -38,7 +39,8 @@ public class TokenServiceTests
     {
         using var db = TestDbContextFactory.Create();
         var options = CreateJwtOptions();
-        var service = new TokenService(db, options);
+        var refreshTokenRepo = new RefreshTokenRepository(db);
+        var service = new TokenService(refreshTokenRepo, options);
         var user = CreateUser();
 
         var token = service.GenerateAccessToken(user);
@@ -59,7 +61,8 @@ public class TokenServiceTests
     {
         using var db = TestDbContextFactory.Create();
         var options = CreateJwtOptions();
-        var service = new TokenService(db, options);
+        var refreshTokenRepo = new RefreshTokenRepository(db);
+        var service = new TokenService(refreshTokenRepo, options);
         var user = CreateUser();
         db.Users.Add(user);
         await db.SaveChangesAsync();
@@ -85,7 +88,8 @@ public class TokenServiceTests
     {
         using var db = TestDbContextFactory.Create();
         var options = CreateJwtOptions();
-        var service = new TokenService(db, options);
+        var refreshTokenRepo = new RefreshTokenRepository(db);
+        var service = new TokenService(refreshTokenRepo, options);
         var user = CreateUser();
         db.Users.Add(user);
         await db.SaveChangesAsync();

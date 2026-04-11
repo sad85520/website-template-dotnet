@@ -38,7 +38,7 @@ make migrate
 | 服務 | URL |
 |------|-----|
 | 應用程式 | http://localhost |
-| API Swagger | http://localhost/api/swagger |
+| API 文件（Scalar） | http://localhost/api/scalar |
 | 健康檢查 | http://localhost/api/health |
 | 健康檢查（詳細） | http://localhost/api/health/ready |
 | Vite Dev Server（直接） | http://localhost:5173 |

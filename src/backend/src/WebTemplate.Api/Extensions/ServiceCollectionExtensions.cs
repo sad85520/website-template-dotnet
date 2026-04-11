@@ -8,6 +8,7 @@ using Microsoft.OpenApi;
 using Microsoft.AspNetCore.OpenApi;
 using WebTemplate.Api.Data;
 using WebTemplate.Api.Models.Settings;
+using WebTemplate.Api.Repositories;
 using WebTemplate.Api.Services;
 using WebTemplate.Api.Services.Interfaces;
 
@@ -50,6 +51,11 @@ public static class ServiceCollectionExtensions
 
     public static IServiceCollection AddApplicationServices(this IServiceCollection services)
     {
+        // Repositories
+        services.AddScoped<IUserRepository, UserRepository>();
+        services.AddScoped<IRefreshTokenRepository, RefreshTokenRepository>();
+
+        // Services
         services.AddScoped<ITokenService, TokenService>();
         services.AddScoped<IAuthService, AuthService>();
         services.AddScoped<IUserService, UserService>();

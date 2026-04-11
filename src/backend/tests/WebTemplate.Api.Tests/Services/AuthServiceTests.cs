@@ -1,6 +1,7 @@
 using Moq;
 using WebTemplate.Api.Models.DTOs.Auth;
 using WebTemplate.Api.Models.Entities;
+using WebTemplate.Api.Repositories;
 using WebTemplate.Api.Services;
 using WebTemplate.Api.Services.Interfaces;
 using WebTemplate.Api.Tests.Helpers;
@@ -15,7 +16,8 @@ public class AuthServiceTests
     public async Task RegisterAsync_WithValidData_ReturnsUserDto()
     {
         using var db = TestDbContextFactory.Create();
-        var service = new AuthService(db, _tokenServiceMock.Object);
+        var userRepo = new UserRepository(db);
+        var service = new AuthService(userRepo, _tokenServiceMock.Object);
 
         var request = new RegisterRequest
         {
@@ -35,7 +37,8 @@ public class AuthServiceTests
     public async Task RegisterAsync_DuplicateEmail_ThrowsInvalidOperationException()
     {
         using var db = TestDbContextFactory.Create();
-        var service = new AuthService(db, _tokenServiceMock.Object);
+        var userRepo = new UserRepository(db);
+        var service = new AuthService(userRepo, _tokenServiceMock.Object);
 
         var request = new RegisterRequest
         {
@@ -53,7 +56,8 @@ public class AuthServiceTests
     public async Task LoginAsync_WithWrongPassword_ThrowsUnauthorizedAccessException()
     {
         using var db = TestDbContextFactory.Create();
-        var service = new AuthService(db, _tokenServiceMock.Object);
+        var userRepo = new UserRepository(db);
+        var service = new AuthService(userRepo, _tokenServiceMock.Object);
 
         await service.RegisterAsync(new RegisterRequest
         {
@@ -74,7 +78,8 @@ public class AuthServiceTests
     public async Task LoginAsync_WithValidCredentials_ReturnsTokens()
     {
         using var db = TestDbContextFactory.Create();
-        var service = new AuthService(db, _tokenServiceMock.Object);
+        var userRepo = new UserRepository(db);
+        var service = new AuthService(userRepo, _tokenServiceMock.Object);
 
         _tokenServiceMock
             .Setup(t => t.GenerateAccessToken(It.IsAny<User>()))
@@ -106,7 +111,8 @@ public class AuthServiceTests
     public async Task LoginAsync_AfterFiveFailedAttempts_LocksAccount()
     {
         using var db = TestDbContextFactory.Create();
-        var service = new AuthService(db, _tokenServiceMock.Object);
+        var userRepo = new UserRepository(db);
+        var service = new AuthService(userRepo, _tokenServiceMock.Object);
 
         await service.RegisterAsync(new RegisterRequest
         {
@@ -141,7 +147,8 @@ public class AuthServiceTests
     public async Task LoginAsync_WithLockedAccount_ThrowsUnauthorizedAccessException()
     {
         using var db = TestDbContextFactory.Create();
-        var service = new AuthService(db, _tokenServiceMock.Object);
+        var userRepo = new UserRepository(db);
+        var service = new AuthService(userRepo, _tokenServiceMock.Object);
 
         // Create user directly with lockout set
         var user = new User
@@ -168,7 +175,8 @@ public class AuthServiceTests
     public async Task LoginAsync_SuccessfulLogin_ResetsFailedAttempts()
     {
         using var db = TestDbContextFactory.Create();
-        var service = new AuthService(db, _tokenServiceMock.Object);
+        var userRepo = new UserRepository(db);
+        var service = new AuthService(userRepo, _tokenServiceMock.Object);
 
         _tokenServiceMock
             .Setup(t => t.GenerateAccessToken(It.IsAny<User>()))

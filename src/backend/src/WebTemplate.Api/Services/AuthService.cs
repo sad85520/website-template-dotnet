@@ -1,17 +1,16 @@
-using Microsoft.EntityFrameworkCore;
-using WebTemplate.Api.Data;
 using WebTemplate.Api.Models.DTOs.Auth;
 using WebTemplate.Api.Models.Entities;
+using WebTemplate.Api.Repositories;
 using WebTemplate.Api.Services.Interfaces;
 
 namespace WebTemplate.Api.Services;
 
-public class AuthService(AppDbContext db, ITokenService tokenService) : IAuthService
+public class AuthService(IUserRepository userRepository, ITokenService tokenService) : IAuthService
 {
     public async Task<(UserDto User, string AccessToken, string RefreshToken)> LoginAsync(
         LoginRequest request, CancellationToken ct = default)
     {
-        var user = await db.Users.FirstOrDefaultAsync(u => u.Email == request.Email, ct)
+        var user = await userRepository.FindByEmailAsync(request.Email, ct)
             ?? throw new UnauthorizedAccessException("Invalid email or password.");
 
         if (user.LockoutUntil > DateTime.UtcNow)
@@ -22,13 +21,13 @@ public class AuthService(AppDbContext db, ITokenService tokenService) : IAuthSer
             user.FailedLoginAttempts++;
             if (user.FailedLoginAttempts >= 5)
                 user.LockoutUntil = DateTime.UtcNow.AddMinutes(15);
-            await db.SaveChangesAsync(ct);
+            await userRepository.SaveChangesAsync(ct);
             throw new UnauthorizedAccessException("Invalid email or password.");
         }
 
         user.FailedLoginAttempts = 0;
         user.LockoutUntil = null;
-        await db.SaveChangesAsync(ct);
+        await userRepository.SaveChangesAsync(ct);
 
         var accessToken = tokenService.GenerateAccessToken(user);
         var refreshTokenEntity = await tokenService.CreateRefreshTokenAsync(user.Id, ct);
@@ -38,7 +37,7 @@ public class AuthService(AppDbContext db, ITokenService tokenService) : IAuthSer
 
     public async Task<UserDto> RegisterAsync(RegisterRequest request, CancellationToken ct = default)
     {
-        var exists = await db.Users.AnyAsync(u => u.Email == request.Email, ct);
+        var exists = await userRepository.ExistsByEmailAsync(request.Email, ct);
         if (exists)
             throw new InvalidOperationException("Email is already registered.");
 
@@ -49,8 +48,7 @@ public class AuthService(AppDbContext db, ITokenService tokenService) : IAuthSer
             DisplayName = request.DisplayName,
         };
 
-        db.Users.Add(user);
-        await db.SaveChangesAsync(ct);
+        await userRepository.CreateAsync(user, ct);
 
         return MapToDto(user);
     }
