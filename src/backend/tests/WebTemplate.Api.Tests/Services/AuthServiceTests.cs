@@ -1,9 +1,9 @@
 using Moq;
-using WebTemplate.Api.Models.DTOs.Auth;
-using WebTemplate.Api.Models.Entities;
-using WebTemplate.Api.Repositories;
-using WebTemplate.Api.Services;
-using WebTemplate.Api.Services.Interfaces;
+using WebTemplate.Api.Modules.Accounts.Models.DTOs;
+using WebTemplate.Api.Modules.Accounts.Models.Entities;
+using WebTemplate.Api.Modules.Accounts.Repositories;
+using WebTemplate.Api.Modules.Accounts.Services;
+using WebTemplate.Api.Modules.Accounts.Services.Interfaces;
 using WebTemplate.Api.Tests.Helpers;
 
 namespace WebTemplate.Api.Tests.Services;
@@ -121,7 +121,6 @@ public class AuthServiceTests
             DisplayName = "User",
         });
 
-        // Fail login 5 times
         for (var i = 0; i < 5; i++)
         {
             await Assert.ThrowsAsync<UnauthorizedAccessException>(() =>
@@ -132,7 +131,6 @@ public class AuthServiceTests
                 }));
         }
 
-        // 6th attempt should throw with lockout message
         var ex = await Assert.ThrowsAsync<UnauthorizedAccessException>(() =>
             service.LoginAsync(new LoginRequest
             {
@@ -150,7 +148,6 @@ public class AuthServiceTests
         var userRepo = new UserRepository(db);
         var service = new AuthService(userRepo, _tokenServiceMock.Object);
 
-        // Create user directly with lockout set
         var user = new User
         {
             Email = "locked@example.com",
@@ -186,7 +183,6 @@ public class AuthServiceTests
             .Setup(t => t.CreateRefreshTokenAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new RefreshToken { TokenHash = "refresh-token", ExpiresAt = DateTime.UtcNow.AddDays(7) });
 
-        // Create user with pre-existing failed attempts
         var user = new User
         {
             Email = "resetattempts@example.com",

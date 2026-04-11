@@ -50,31 +50,46 @@ website-template-dotnet/
 │   ├── frontend/                        # Vue 3 前端（Vite + TypeScript）
 │   └── backend/
 │       ├── src/WebTemplate.Api/         # ASP.NET Core Web API 專案
-│       │   ├── Controllers/
-│       │   │   ├── AuthController.cs    # 登入、登出、refresh token 端點
-│       │   │   ├── UsersController.cs   # 使用者 CRUD 端點
-│       │   │   └── HealthController.cs  # 健康檢查（Liveness / Readiness）
-│       │   ├── Services/
-│       │   │   ├── Interfaces/          # 業務邏輯介面
-│       │   │   ├── AuthService.cs       # JWT 發行、驗證、refresh 邏輯
-│       │   │   ├── UserService.cs       # 使用者管理業務邏輯
-│       │   │   └── TokenService.cs      # Refresh token 管理
-│       │   ├── Repositories/
-│       │   │   ├── IUserRepository.cs       # 使用者資料存取介面
-│       │   │   ├── UserRepository.cs        # EF Core 使用者查詢實作
-│       │   │   ├── IRefreshTokenRepository.cs
-│       │   │   └── RefreshTokenRepository.cs
-│       │   ├── Models/
-│       │   │   ├── Entities/            # EF Core 資料庫實體（User, RefreshToken）
-│       │   │   ├── DTOs/                # Request / Response DTO（Auth/, Common/）
-│       │   │   └── Settings/            # 設定類別（JwtSettings）
-│       │   ├── Data/
-│       │   │   ├── AppDbContext.cs       # EF Core DbContext
-│       │   │   └── Migrations/          # EF Core 自動產生的 Migration 檔
-│       │   ├── Extensions/
-│       │   │   └── ServiceCollectionExtensions.cs  # 所有 DI 注冊集中於此
-│       │   └── Middleware/
-│       │       └── GlobalExceptionHandler.cs       # 全域例外攔截
+│       │   ├── Modules/                 # 業務模組（每個模組自成一包）
+│       │   │   └── Accounts/            # 範例：使用者與認證模組
+│       │   │       ├── Controllers/
+│       │   │       │   ├── AuthController.cs    # 登入、登出、refresh token 端點
+│       │   │       │   └── UsersController.cs   # 使用者 CRUD 端點
+│       │   │       ├── Services/
+│       │   │       │   ├── Interfaces/
+│       │   │       │   │   ├── IAuthService.cs  # JWT 登入、登出、refresh 介面
+│       │   │       │   │   ├── IUserService.cs  # 使用者管理介面
+│       │   │       │   │   └── ITokenService.cs # Refresh token 管理介面
+│       │   │       │   ├── AuthService.cs       # JWT 發行、驗證、refresh 邏輯
+│       │   │       │   ├── UserService.cs       # 使用者管理業務邏輯
+│       │   │       │   └── TokenService.cs      # Refresh token 管理
+│       │   │       ├── Repositories/
+│       │   │       │   ├── Interfaces/
+│       │   │       │   │   ├── IUserRepository.cs         # 使用者資料存取介面
+│       │   │       │   │   └── IRefreshTokenRepository.cs # Refresh token 存取介面
+│       │   │       │   ├── UserRepository.cs              # EF Core 使用者查詢實作
+│       │   │       │   └── RefreshTokenRepository.cs      # EF Core Token 查詢實作
+│       │   │       └── Models/
+│       │   │           ├── Entities/
+│       │   │           │   ├── User.cs          # EF Core User 實體
+│       │   │           │   └── RefreshToken.cs  # EF Core RefreshToken 實體
+│       │   │           ├── DTOs/
+│       │   │           │   └── AuthDtos.cs      # LoginRequest / RegisterRequest / UserDto
+│       │   │           └── Settings/
+│       │   │               └── JwtSettings.cs   # JWT 設定類別
+│       │   ├── Common/                  # 跨模組共用（不含業務邏輯）
+│       │   │   └── Models/
+│       │   │       └── ApiResponse.cs   # 統一回傳格式 ApiResponse<T>
+│       │   ├── Infrastructure/          # 基礎設施（框架層，不含業務邏輯）
+│       │   │   ├── Data/
+│       │   │   │   ├── AppDbContext.cs  # EF Core DbContext
+│       │   │   │   └── Migrations/     # EF Core 自動產生的 Migration 檔
+│       │   │   ├── Extensions/
+│       │   │   │   └── ServiceCollectionExtensions.cs  # 所有 DI 注冊集中於此
+│       │   │   └── Middleware/
+│       │   │       └── GlobalExceptionHandler.cs       # 全域例外攔截
+│       │   └── Controllers/
+│       │       └── HealthController.cs  # 健康檢查（Liveness / Readiness）
 │       └── tests/
 │           └── WebTemplate.Api.Tests/   # xUnit 測試（AuthServiceTests 等）
 │
@@ -131,12 +146,13 @@ MSSQL
 
 | 層 | 資料夾 | 放什麼 | 不放什麼 |
 |----|--------|--------|---------|
-| HTTP 層 | `Controllers/` | 路由、參數驗證、呼叫 Service、回傳格式 | 業務邏輯、SQL |
-| 業務邏輯 | `Services/` | 驗證規則、資料組合、計算 | 直接查 DB |
-| 資料存取 | `Repositories/` | EF Core 查詢、LINQ | 業務判斷 |
-| 資料模型 | `Models/Entities/` | EF Core 對應資料表的實體類別 | DTO |
-| 請求/回應 | `Models/DTOs/` | Request / Response 的 DTO | 資料庫欄位 |
-| 基礎設施 | `Extensions/`, `Middleware/` | DI 注冊、Middleware | 業務邏輯 |
+| HTTP 層 | `Modules/*/Controllers/` | 路由、參數驗證、呼叫 Service、回傳格式 | 業務邏輯、SQL |
+| 業務邏輯 | `Modules/*/Services/` | 驗證規則、資料組合、計算 | 直接查 DB |
+| 資料存取 | `Modules/*/Repositories/` | EF Core 查詢、LINQ | 業務判斷 |
+| 資料模型 | `Modules/*/Models/Entities/` | EF Core 對應資料表的實體類別 | DTO |
+| 請求/回應 | `Modules/*/Models/DTOs/` | Request / Response 的 DTO | 資料庫欄位 |
+| 共用 | `Common/Models/` | 跨模組共用（ApiResponse） | 業務邏輯 |
+| 基礎設施 | `Infrastructure/` | DB 連線、Middleware、DI 注冊 | 業務邏輯 |
 
 **規則：**
 - Controller 不直接碰 Repository
@@ -147,16 +163,16 @@ MSSQL
 
 | 工具 | 位置 | 用途 |
 |------|------|------|
-| `ApiResponse<T>` | `Models/DTOs/Common/` | 統一回傳格式（Success / Fail） |
-| `AppDbContext` | `Data/AppDbContext.cs` | EF Core 資料庫上下文 |
-| `GlobalExceptionHandler` | `Middleware/` | 自動攔截未處理例外 |
-| `JwtSettings` | `Models/Settings/JwtSettings.cs` | JWT 設定（從 appsettings 取得） |
-| `IUserRepository` | `Repositories/` | 使用者資料存取（範本已實作） |
-| `IAuthService` | `Services/Interfaces/` | JWT 登入、登出、refresh（範本已實作） |
+| `ApiResponse<T>` | `Common/Models/ApiResponse.cs` | 統一回傳格式（Ok / Fail / Paginated） |
+| `AppDbContext` | `Infrastructure/Data/AppDbContext.cs` | EF Core 資料庫上下文 |
+| `GlobalExceptionHandler` | `Infrastructure/Middleware/` | 自動攔截未處理例外 |
+| `JwtSettings` | `Modules/Accounts/Models/Settings/` | JWT 設定（從 appsettings 取得） |
+| `IUserRepository` | `Modules/Accounts/Repositories/Interfaces/` | 使用者資料存取（範本已實作） |
+| `IAuthService` | `Modules/Accounts/Services/Interfaces/` | JWT 登入、登出、refresh（範本已實作） |
 
 ```csharp
 // 統一回傳格式
-return Ok(ApiResponse<ProductRes>.Success(product));
+return Ok(ApiResponse<ProductRes>.Ok(product));
 return Ok(ApiResponse<ProductRes>.Fail("查無資料"));
 return BadRequest(ApiResponse<ProductRes>.Fail("名稱為必填"));
 
@@ -166,56 +182,80 @@ public class MyController(IAuthService auth, IUserRepository users) : Controller
 
 ## 如何擴充這個專案
 
-### 新增一個 API 端點（快速流程）
+### 新增一個模組（標準流程）
 
-以新增「取得產品列表」為例：
+以新增「Products（商品）」模組為例，完整步驟：
 
-**1. 建立 Entity**（如果需要新資料表）
-```csharp
-// Models/Entities/Product.cs
-public class Product
-{
-    public Guid Id { get; set; }
-    public string Name { get; set; } = "";
-    public decimal Price { get; set; }
-}
+### 步驟 1：建立目錄結構
+
+```
+Modules/Products/
+├── Controllers/
+├── Services/Interfaces/
+├── Repositories/Interfaces/
+└── Models/
+    ├── Entities/
+    └── DTOs/
 ```
 
-**2. 建立 DTO**
+### 步驟 2：定義 Models
+
 ```csharp
-// Models/DTOs/Products/ProductRes.cs
+// Modules/Products/Models/Entities/Product.cs
+namespace WebTemplate.Api.Modules.Products.Models.Entities;
+
+public class Product
+{
+    public Guid Id { get; set; } = Guid.NewGuid();
+    public string Name { get; set; } = string.Empty;
+    public decimal Price { get; set; }
+}
+
+// Modules/Products/Models/DTOs/ProductDtos.cs
+namespace WebTemplate.Api.Modules.Products.Models.DTOs;
+
 public record ProductRes(Guid Id, string Name, decimal Price);
 ```
 
-**3. 新增 Repository**
+### 步驟 3：定義 Repository 介面與實作
+
 ```csharp
-// Repositories/IProductRepository.cs
+// Modules/Products/Repositories/Interfaces/IProductRepository.cs
+namespace WebTemplate.Api.Modules.Products.Repositories.Interfaces;
+
 public interface IProductRepository
 {
     Task<List<Product>> GetAllAsync(CancellationToken ct);
-    Task<Product?> GetByIdAsync(Guid id, CancellationToken ct);
+    Task<Product?> FindByIdAsync(Guid id, CancellationToken ct);
 }
 
-// Repositories/ProductRepository.cs
+// Modules/Products/Repositories/ProductRepository.cs
+namespace WebTemplate.Api.Modules.Products.Repositories;
+
 public class ProductRepository(AppDbContext db) : IProductRepository
 {
     public Task<List<Product>> GetAllAsync(CancellationToken ct) =>
         db.Products.ToListAsync(ct);
 
-    public Task<Product?> GetByIdAsync(Guid id, CancellationToken ct) =>
+    public Task<Product?> FindByIdAsync(Guid id, CancellationToken ct) =>
         db.Products.FirstOrDefaultAsync(p => p.Id == id, ct);
 }
 ```
 
-**4. 新增 Service**
+### 步驟 4：定義 Service 介面與實作
+
 ```csharp
-// Services/Interfaces/IProductService.cs
+// Modules/Products/Services/Interfaces/IProductService.cs
+namespace WebTemplate.Api.Modules.Products.Services.Interfaces;
+
 public interface IProductService
 {
     Task<List<ProductRes>> GetAllAsync(CancellationToken ct);
 }
 
-// Services/ProductService.cs
+// Modules/Products/Services/ProductService.cs
+namespace WebTemplate.Api.Modules.Products.Services;
+
 public class ProductService(IProductRepository repo) : IProductService
 {
     public async Task<List<ProductRes>> GetAllAsync(CancellationToken ct)
@@ -226,76 +266,43 @@ public class ProductService(IProductRepository repo) : IProductService
 }
 ```
 
-**5. 建立 Controller**
+### 步驟 5：建立 Controller
+
 ```csharp
-// Controllers/ProductsController.cs
+// Modules/Products/Controllers/ProductsController.cs
+namespace WebTemplate.Api.Modules.Products.Controllers;
+
 [ApiController]
 [Route("api/v1/[controller]")]
 [Authorize]
 public class ProductsController(IProductService svc) : ControllerBase
 {
     [HttpGet]
-    public async Task<ActionResult<ApiResponse<List<ProductRes>>>> GetAll(CancellationToken ct)
+    public async Task<IActionResult> GetAll(CancellationToken ct)
     {
         var products = await svc.GetAllAsync(ct);
-        return Ok(ApiResponse<List<ProductRes>>.Success(products));
+        return Ok(ApiResponse<List<ProductRes>>.Ok(products));
     }
 }
 ```
 
-**6. 注冊 DI**（`Extensions/ServiceCollectionExtensions.cs`）
+### 步驟 6：注冊 DI
+
+在 `Infrastructure/Extensions/ServiceCollectionExtensions.cs` 的 `AddApplicationServices()` 加入：
+
 ```csharp
 services.AddScoped<IProductRepository, ProductRepository>();
 services.AddScoped<IProductService, ProductService>();
 ```
 
-**7. 新增 EF Core Migration**
+### 步驟 7：新增 EF Core Migration
+
 ```bash
 make migration NAME=AddProductTable
 make migrate
 ```
 
-### 新增大型功能域（跨多個資料表的模組）
-
-若功能夠大（例如「訂單管理」涵蓋多個資料表與複雜邏輯），在各層的資料夾內建立子目錄保持整潔：
-
-**1. 建立標準目錄結構**
-```
-Controllers/Orders/
-  OrdersController.cs
-  OrderItemsController.cs
-Services/
-  Interfaces/IOrderService.cs
-  Interfaces/IOrderItemService.cs
-  OrderService.cs
-  OrderItemService.cs
-Repositories/
-  IOrderRepository.cs
-  IOrderItemRepository.cs
-  OrderRepository.cs
-  OrderItemRepository.cs
-Models/
-  Entities/Order.cs
-  Entities/OrderItem.cs
-  DTOs/Orders/OrderReq.cs
-  DTOs/Orders/OrderRes.cs
-```
-
-**2. 在 `Extensions/ServiceCollectionExtensions.cs` 加入 DI 注冊**
-```csharp
-services.AddScoped<IOrderRepository, OrderRepository>();
-services.AddScoped<IOrderItemRepository, OrderItemRepository>();
-services.AddScoped<IOrderService, OrderService>();
-services.AddScoped<IOrderItemService, OrderItemService>();
-```
-
-**3. 建立 Migration**
-```bash
-make migration NAME=AddOrderTables
-make migrate
-```
-
-路由由 Controller 上的 `[Route]` attribute 自動生效，不需額外設定。
+新模組的 API 會自動出現在 `/api/scalar` 的文件中。
 
 ### 寫測試
 

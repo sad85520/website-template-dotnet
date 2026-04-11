@@ -1,5 +1,5 @@
 using Microsoft.EntityFrameworkCore;
-using WebTemplate.Api.Data;
+using WebTemplate.Api.Infrastructure.Data;
 
 namespace WebTemplate.Api.Tests.Helpers;
 

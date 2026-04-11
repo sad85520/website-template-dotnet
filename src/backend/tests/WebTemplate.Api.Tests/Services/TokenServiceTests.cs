@@ -2,10 +2,10 @@ using System.IdentityModel.Tokens.Jwt;
 using System.Security.Cryptography;
 using System.Text;
 using Microsoft.Extensions.Options;
-using WebTemplate.Api.Models.Entities;
-using WebTemplate.Api.Models.Settings;
-using WebTemplate.Api.Repositories;
-using WebTemplate.Api.Services;
+using WebTemplate.Api.Modules.Accounts.Models.Entities;
+using WebTemplate.Api.Modules.Accounts.Models.Settings;
+using WebTemplate.Api.Modules.Accounts.Repositories;
+using WebTemplate.Api.Modules.Accounts.Services;
 using WebTemplate.Api.Tests.Helpers;
 
 namespace WebTemplate.Api.Tests.Services;
@@ -67,18 +67,15 @@ public class TokenServiceTests
         db.Users.Add(user);
         await db.SaveChangesAsync();
 
-        // CreateRefreshTokenAsync returns the entity with TokenHash set to the raw token
         var result = await service.CreateRefreshTokenAsync(user.Id);
         var rawToken = result.TokenHash;
 
         Assert.False(string.IsNullOrWhiteSpace(rawToken));
 
-        // Verify the stored record in the DB contains the SHA256 hash, not the raw token
         var stored = await db.RefreshTokens.FindAsync(result.Id);
         Assert.NotNull(stored);
         Assert.NotEqual(rawToken, stored.TokenHash);
 
-        // Verify the stored value equals the SHA256 hash of the raw token
         var expectedHash = Convert.ToBase64String(SHA256.HashData(Encoding.UTF8.GetBytes(rawToken)));
         Assert.Equal(expectedHash, stored.TokenHash);
     }
@@ -94,20 +91,18 @@ public class TokenServiceTests
         db.Users.Add(user);
         await db.SaveChangesAsync();
 
-        // Manually insert an expired refresh token
         var rawToken = "expired-raw-token";
         var tokenHash = Convert.ToBase64String(SHA256.HashData(Encoding.UTF8.GetBytes(rawToken)));
         var expiredToken = new RefreshToken
         {
             UserId = user.Id,
             TokenHash = tokenHash,
-            ExpiresAt = DateTime.UtcNow.AddDays(-1), // already expired
+            ExpiresAt = DateTime.UtcNow.AddDays(-1),
             User = user,
         };
         db.RefreshTokens.Add(expiredToken);
         await db.SaveChangesAsync();
 
-        // GetActiveRefreshTokenAsync should find the record but IsActive will be false
         var found = await service.GetActiveRefreshTokenAsync(rawToken);
         Assert.NotNull(found);
         Assert.False(found.IsActive);

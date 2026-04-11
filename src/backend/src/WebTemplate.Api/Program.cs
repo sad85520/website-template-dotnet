@@ -2,9 +2,9 @@ using Microsoft.EntityFrameworkCore;
 using NetEscapades.AspNetCore.SecurityHeaders;
 using Scalar.AspNetCore;
 using Serilog;
-using WebTemplate.Api.Data;
-using WebTemplate.Api.Extensions;
-using WebTemplate.Api.Middleware;
+using WebTemplate.Api.Infrastructure.Data;
+using WebTemplate.Api.Infrastructure.Extensions;
+using WebTemplate.Api.Infrastructure.Middleware;
 
 Log.Logger = new LoggerConfiguration()
     .WriteTo.Console()
