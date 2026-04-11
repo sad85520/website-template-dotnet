@@ -14,6 +14,8 @@ export function useAuth() {
 
     if (result.success) {
       notificationStore.success('登入成功')
+      // redirect 參數由 router guard 在未授權跳轉時帶入，
+      // 讓使用者登入後回到原本想前往的頁面而非固定首頁。
       const redirect = (route.query.redirect as string) || '/'
       await router.push(redirect)
     } else {

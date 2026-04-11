@@ -9,7 +9,7 @@
       </RouterLink>
       <RouterLink v-else to="/dashboard" class="btn-primary">進入 Dashboard</RouterLink>
       <a
-        href="/api/swagger"
+        href="/scalar"
         target="_blank"
         rel="noopener noreferrer"
         class="btn-secondary"

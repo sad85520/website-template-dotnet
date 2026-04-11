@@ -14,10 +14,6 @@ export interface LoginResponse {
   expiresIn: number
 }
 
-export interface RefreshTokenRequest {
-  // refresh token 透過 httpOnly cookie 自動帶入，不需要 body
-}
-
 export interface UserDto {
   id: string
   email: string

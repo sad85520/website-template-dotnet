@@ -6,6 +6,8 @@ using WebTemplate.Api.Infrastructure.Data;
 using WebTemplate.Api.Infrastructure.Extensions;
 using WebTemplate.Api.Infrastructure.Middleware;
 
+// Bootstrap logger：在 DI 容器建立完成前提供最低限度的日誌能力，
+// 確保 WebApplication.CreateBuilder 階段拋出的例外也能被記錄。
 Log.Logger = new LoggerConfiguration()
     .WriteTo.Console()
     .CreateBootstrapLogger();
@@ -24,6 +26,8 @@ try
     builder.Services.AddControllers();
     builder.Services.AddEndpointsApiExplorer();
 
+    // AddProblemDetails 必須與 AddExceptionHandler 搭配，
+    // 才能在 handler 未攔截到例外時回退為標準 RFC 7807 Problem Details 格式。
     builder.Services.AddExceptionHandler<GlobalExceptionHandler>();
     builder.Services.AddProblemDetails();
 
@@ -52,6 +56,8 @@ try
     var app = builder.Build();
 
     // Auto-migrate（僅開發環境）
+    // 生產環境應透過 CI/CD pipeline 或獨立的 migration job 執行，
+    // 避免多個 pod 同時啟動時發生競態條件。
     if (app.Environment.IsDevelopment())
     {
         using var scope = app.Services.CreateScope();
@@ -96,6 +102,8 @@ try
                 })));
     }
 
+    // UseExceptionHandler 必須排在所有業務 middleware 之前，
+    // 否則後續 middleware 拋出的例外將無法被攔截。
     app.UseExceptionHandler();
     app.UseSerilogRequestLogging();
 
@@ -109,6 +117,10 @@ try
         app.UseCors();
     }
 
+    // middleware 順序有嚴格依賴：
+    // RateLimiter → Authentication → Authorization
+    // 若 Authentication 在 RateLimiter 之前，攻擊者可繞過速率限制先觸發 JWT 驗證邏輯。
+    // Authorization 必須在 Authentication 之後，因為需要已解析的 ClaimsPrincipal。
     app.UseRateLimiter();
     app.UseAuthentication();
     app.UseAuthorization();
@@ -116,6 +128,8 @@ try
 
     await app.RunAsync();
 }
+// HostAbortedException 是 .NET 在 dotnet watch 重新啟動時主動拋出的，
+// 不屬於異常終止，過濾掉可避免產生誤導性的 Fatal 日誌。
 catch (Exception ex) when(ex is not HostAbortedException)
 {
     Log.Fatal(ex, "Application terminated unexpectedly");

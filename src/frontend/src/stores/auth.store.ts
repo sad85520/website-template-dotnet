@@ -4,6 +4,8 @@ import { authApi } from '@/api'
 import type { UserDto, LoginRequest, RegisterRequest } from '@/types'
 
 export const useAuthStore = defineStore('auth', () => {
+  // accessToken 僅存於記憶體（Pinia reactive state），不存入 localStorage，
+  // 防止 XSS 攻擊直接竊取 token；頁面重新整理後透過 tryRefreshToken 以 httpOnly cookie 還原。
   const accessToken = ref<string | null>(null)
   const currentUser = ref<UserDto | null>(null)
   const isLoading = ref(false)
@@ -47,6 +49,8 @@ export const useAuthStore = defineStore('auth', () => {
     try {
       await authApi.logout()
     } finally {
+      // 即使 API 請求失敗（例如網路中斷），仍清除本地認證狀態，
+      // 確保使用者在客戶端被登出，不因 API 錯誤卡在已登入狀態。
       clearAuth()
     }
   }
@@ -58,6 +62,9 @@ export const useAuthStore = defineStore('auth', () => {
     }
   }
 
+  // 頁面刷新後 Pinia 狀態會清空，此方法透過 httpOnly cookie 中的 refresh token
+  // 靜默重建認證狀態，讓使用者不需要重新登入。
+  // 由 router guard 在每次導航前呼叫，僅在 isAuthenticated 為 false 時執行。
   async function tryRefreshToken(): Promise<boolean> {
     try {
       const response = await authApi.refresh()

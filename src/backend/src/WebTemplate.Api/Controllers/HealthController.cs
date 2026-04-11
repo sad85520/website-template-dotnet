@@ -7,9 +7,13 @@ namespace WebTemplate.Api.Controllers;
 [Route("api/health")]
 public class HealthController(HealthCheckService healthCheckService) : ControllerBase
 {
+    // Liveness：只確認程序本身是否存活，不檢查任何依賴項，
+    // Kubernetes 以此決定是否重啟 pod（不應因 DB 暫時斷線而重啟）。
     [HttpGet]
     public IActionResult Liveness() => Ok(new { status = "healthy" });
 
+    // Readiness：確認應用程式的所有依賴（目前為資料庫）是否就緒，
+    // Kubernetes 以此決定是否將流量導入此 pod（未就緒時不接收請求）。
     [HttpGet("ready")]
     public async Task<IActionResult> Readiness(CancellationToken ct)
     {

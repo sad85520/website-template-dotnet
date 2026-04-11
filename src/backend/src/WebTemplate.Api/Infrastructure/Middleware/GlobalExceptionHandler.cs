@@ -13,6 +13,11 @@ public sealed class GlobalExceptionHandler(ILogger<GlobalExceptionHandler> logge
         logger.LogError(exception, "Unhandled exception for {Method} {Path}",
             httpContext.Request.Method, httpContext.Request.Path);
 
+        // 例外型別到 HTTP 狀態碼的對應是業務語意的約定：
+        // - 服務層拋出 UnauthorizedAccessException 代表身分驗證/授權失敗
+        // - InvalidOperationException 代表業務規則衝突（如信箱已存在）
+        // - 500 的 message 刻意使用通用文字，避免將內部錯誤細節洩漏給客戶端；
+        //   詳細資訊已透過上方 LogError 記錄於伺服器端日誌。
         var (statusCode, message) = exception switch
         {
             UnauthorizedAccessException => (StatusCodes.Status401Unauthorized, exception.Message),
@@ -27,6 +32,7 @@ public sealed class GlobalExceptionHandler(ILogger<GlobalExceptionHandler> logge
             ApiResponse<object>.Fail(message),
             cancellationToken);
 
+        // 回傳 true 表示例外已被處理，框架不會再繼續傳播或寫入 ProblemDetails。
         return true;
     }
 }

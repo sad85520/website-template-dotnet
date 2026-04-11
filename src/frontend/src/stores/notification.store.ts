@@ -17,6 +17,8 @@ export const useNotificationStore = defineStore('notification', () => {
     const id = crypto.randomUUID()
     notifications.value.push({ id, type, message, duration })
 
+    // duration <= 0 表示通知不自動消失（需使用者手動關閉），
+    // 適合需要使用者確認的重要訊息。
     if (duration > 0) {
       setTimeout(() => dismiss(id), duration)
     }

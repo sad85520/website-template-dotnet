@@ -23,3 +23,4 @@ export interface PaginationQuery {
   limit?: number
   search?: string
 }
+

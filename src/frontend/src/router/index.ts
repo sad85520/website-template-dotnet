@@ -38,6 +38,8 @@ const routes: RouteRecordRaw[] = [
   },
 ]
 
+// createWebHistory 使用 HTML5 History API，路由路徑不帶 # 號，
+// 需要後端（或反向代理）設定 fallback 將所有未匹配路徑回傳 index.html。
 const router = createRouter({
   history: createWebHistory(),
   routes,
@@ -55,6 +57,8 @@ router.beforeEach(async (to, _from, next) => {
     return next({ name: 'login', query: { redirect: to.fullPath } })
   }
 
+  // guestOnly 路由（如登入、註冊頁）在已登入時自動重導向首頁，
+  // 防止已登入使用者重複登入造成 token 狀態混亂。
   if (to.meta.guestOnly && authStore.isAuthenticated) {
     return next({ name: 'home' })
   }

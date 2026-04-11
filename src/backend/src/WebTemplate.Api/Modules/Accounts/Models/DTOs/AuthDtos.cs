@@ -23,17 +23,13 @@ public class RegisterRequest
     public string DisplayName { get; set; } = string.Empty;
 }
 
-public class LoginResponse
-{
-    public string AccessToken { get; set; } = string.Empty;
-    public int ExpiresIn { get; set; }
-}
+public sealed record LoginResponse(string AccessToken, int ExpiresIn);
 
-public class UserDto
+public sealed record UserDto
 {
-    public Guid Id { get; set; }
-    public string Email { get; set; } = string.Empty;
-    public string DisplayName { get; set; } = string.Empty;
-    public string Role { get; set; } = string.Empty;
-    public DateTime CreatedAt { get; set; }
+    public Guid Id { get; init; }
+    public string Email { get; init; } = string.Empty;
+    public string DisplayName { get; init; } = string.Empty;
+    public string Role { get; init; } = string.Empty;
+    public DateTime CreatedAt { get; init; }
 }

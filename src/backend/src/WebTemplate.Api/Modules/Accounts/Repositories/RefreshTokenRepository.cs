@@ -7,6 +7,9 @@ namespace WebTemplate.Api.Modules.Accounts.Repositories;
 
 public class RefreshTokenRepository(AppDbContext db) : IRefreshTokenRepository
 {
+    // 刻意不在查詢條件中過濾 IsActive，讓呼叫端（AuthService）能區分
+    // 「token 不存在」與「token 已被撤銷（可能遭重放攻擊）」兩種情境，
+    // 後者需要觸發全面撤銷邏輯。
     public async Task<RefreshToken?> FindActiveByHashAsync(string tokenHash, CancellationToken ct = default)
         => await db.RefreshTokens
             .Include(r => r.User)
@@ -38,6 +41,8 @@ public class RefreshTokenRepository(AppDbContext db) : IRefreshTokenRepository
         await db.SaveChangesAsync(ct);
     }
 
+    // 將實體從 EF Core 的變更追蹤中移除，讓 TokenService 得以安全地在記憶體中
+    // 修改 TokenHash 欄位（替換為明文），而不觸發後續的資料庫更新。
     public void Detach(RefreshToken token)
         => db.Entry(token).State = EntityState.Detached;
 }

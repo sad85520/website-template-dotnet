@@ -15,7 +15,12 @@ public class UsersController(IUserService userService) : ControllerBase
     [HttpGet("me")]
     public async Task<IActionResult> GetMe(CancellationToken ct)
     {
-        var userId = Guid.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
+        // 從 JWT Claim 中取得使用者 ID，而非從 request body 接受客戶端傳入的 ID，
+        // 防止使用者透過竄改參數存取他人資料（IDOR 攻擊）。
+        var userIdClaim = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        if (userIdClaim is null || !Guid.TryParse(userIdClaim, out var userId))
+            return Unauthorized(ApiResponse<object>.Fail("Invalid token claims."));
+
         var user = await userService.GetByIdAsync(userId, ct);
 
         if (user is null)
