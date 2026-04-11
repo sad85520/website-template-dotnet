@@ -5,8 +5,10 @@ using WebTemplate.Api.Modules.Accounts.Services.Interfaces;
 
 namespace WebTemplate.Api.Modules.Accounts.Services;
 
+/// <summary>使用者查詢服務，實作 <see cref="IUserService"/>。</summary>
 public class UserService(IUserRepository userRepository) : IUserService
 {
+    /// <inheritdoc/>
     public async Task<UserDto?> GetByIdAsync(Guid id, CancellationToken ct = default)
     {
         var user = await userRepository.FindByIdAsync(id, ct);
@@ -22,6 +24,7 @@ public class UserService(IUserRepository userRepository) : IUserService
         };
     }
 
+    /// <inheritdoc/>
     public async Task<ApiResponse<IEnumerable<UserDto>>> GetAllAsync(
         int page, int limit, string? search, CancellationToken ct = default)
     {
