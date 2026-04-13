@@ -15,7 +15,7 @@ spec:
     spec:
       containers:
         - name: backend
-          image: ghcr.io/sad85520/website-template-dotnet/backend:sha-b17651a
+          image: ghcr.io/sad85520/website-template-dotnet/backend:sha-3180c3f
           ports:
             - containerPort: 8080
           envFrom:
