@@ -8,10 +8,15 @@ using WebTemplate.Api.Tests.Helpers;
 
 namespace WebTemplate.Api.Tests.Services;
 
+/// <summary>
+/// <see cref="AuthService"/> 的單元測試，驗證使用者註冊、登入、帳號鎖定與失敗計數重置邏輯。
+/// 使用 InMemory EF Core 資料庫；Token 相關依賴以 Moq 替代以聚焦在認證業務邏輯本身。
+/// </summary>
 public class AuthServiceTests
 {
     private readonly Mock<ITokenService> _tokenServiceMock = new();
 
+    /// <summary>有效資料呼叫 RegisterAsync 應建立使用者並回傳包含正確 Email、DisplayName 與 role="user" 的 UserDto。</summary>
     [Fact]
     public async Task RegisterAsync_WithValidData_ReturnsUserDto()
     {
@@ -33,6 +38,7 @@ public class AuthServiceTests
         Assert.Equal("user", result.Role);
     }
 
+    /// <summary>以相同 Email 重複呼叫 RegisterAsync 應拋出 InvalidOperationException。</summary>
     [Fact]
     public async Task RegisterAsync_DuplicateEmail_ThrowsInvalidOperationException()
     {
@@ -52,6 +58,7 @@ public class AuthServiceTests
         await Assert.ThrowsAsync<InvalidOperationException>(() => service.RegisterAsync(request));
     }
 
+    /// <summary>以錯誤密碼呼叫 LoginAsync 應拋出 UnauthorizedAccessException。</summary>
     [Fact]
     public async Task LoginAsync_WithWrongPassword_ThrowsUnauthorizedAccessException()
     {
@@ -74,6 +81,7 @@ public class AuthServiceTests
             }));
     }
 
+    /// <summary>正確憑證呼叫 LoginAsync 應回傳使用者資料與 access/refresh token 三元組。</summary>
     [Fact]
     public async Task LoginAsync_WithValidCredentials_ReturnsTokens()
     {
@@ -107,6 +115,7 @@ public class AuthServiceTests
         Assert.Equal("refresh-token", refreshToken);
     }
 
+    /// <summary>連續五次密碼錯誤後，第六次呼叫 LoginAsync 應拋出含 "locked" 字樣的例外（帳號鎖定）。</summary>
     [Fact]
     public async Task LoginAsync_AfterFiveFailedAttempts_LocksAccount()
     {
@@ -141,6 +150,7 @@ public class AuthServiceTests
         Assert.Contains("locked", ex.Message, StringComparison.OrdinalIgnoreCase);
     }
 
+    /// <summary>LockoutUntil 未過期的帳號即使密碼正確也應拋出含 "locked" 字樣的 UnauthorizedAccessException。</summary>
     [Fact]
     public async Task LoginAsync_WithLockedAccount_ThrowsUnauthorizedAccessException()
     {
@@ -168,6 +178,7 @@ public class AuthServiceTests
         Assert.Contains("locked", ex.Message, StringComparison.OrdinalIgnoreCase);
     }
 
+    /// <summary>登入成功後應將 FailedLoginAttempts 重置為 0。</summary>
     [Fact]
     public async Task LoginAsync_SuccessfulLogin_ResetsFailedAttempts()
     {

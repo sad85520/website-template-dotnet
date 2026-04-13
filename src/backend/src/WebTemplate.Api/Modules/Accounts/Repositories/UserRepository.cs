@@ -5,17 +5,22 @@ using WebTemplate.Api.Modules.Accounts.Repositories.Interfaces;
 
 namespace WebTemplate.Api.Modules.Accounts.Repositories;
 
+/// <summary>使用者資料存取實作，實作 <see cref="IUserRepository"/>。</summary>
 public class UserRepository(AppDbContext db) : IUserRepository
 {
+    /// <inheritdoc/>
     public async Task<User?> FindByIdAsync(Guid id, CancellationToken ct = default)
         => await db.Users.FindAsync([id], ct);
 
+    /// <inheritdoc/>
     public async Task<User?> FindByEmailAsync(string email, CancellationToken ct = default)
         => await db.Users.FirstOrDefaultAsync(u => u.Email == email, ct);
 
+    /// <inheritdoc/>
     public async Task<bool> ExistsByEmailAsync(string email, CancellationToken ct = default)
         => await db.Users.AnyAsync(u => u.Email == email, ct);
 
+    /// <inheritdoc/>
     public async Task<(int Total, IReadOnlyList<User> Items)> FindPagedAsync(
         int page, int limit, string? search, CancellationToken ct = default)
     {
@@ -40,6 +45,7 @@ public class UserRepository(AppDbContext db) : IUserRepository
         return (total, items);
     }
 
+    /// <inheritdoc/>
     public async Task<User> CreateAsync(User user, CancellationToken ct = default)
     {
         db.Users.Add(user);
@@ -47,6 +53,7 @@ public class UserRepository(AppDbContext db) : IUserRepository
         return user;
     }
 
+    /// <inheritdoc/>
     public Task SaveChangesAsync(CancellationToken ct = default)
         => db.SaveChangesAsync(ct);
 }

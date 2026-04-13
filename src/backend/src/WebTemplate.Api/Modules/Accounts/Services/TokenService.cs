@@ -11,10 +11,12 @@ using WebTemplate.Api.Modules.Accounts.Services.Interfaces;
 
 namespace WebTemplate.Api.Modules.Accounts.Services;
 
+/// <summary>JWT Access Token 與 Refresh Token 的產生、驗證及撤銷服務，實作 <see cref="ITokenService"/>。</summary>
 public class TokenService(IRefreshTokenRepository refreshTokenRepository, IOptions<JwtSettings> jwtOptions) : ITokenService
 {
     private readonly JwtSettings _jwt = jwtOptions.Value;
 
+    /// <inheritdoc/>
     public string GenerateAccessToken(User user)
     {
         var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(_jwt.Secret));
@@ -41,18 +43,21 @@ public class TokenService(IRefreshTokenRepository refreshTokenRepository, IOptio
 
     // 使用密碼學安全的亂數產生器（CSPRNG）而非 Random，
     // 64 bytes 提供 512 bits 的熵，實務上不可暴力猜測。
+    /// <inheritdoc/>
     public string GenerateRefreshToken()
     {
         var bytes = RandomNumberGenerator.GetBytes(64);
         return Convert.ToBase64String(bytes);
     }
 
+    /// <inheritdoc/>
     public async Task<RefreshToken?> GetActiveRefreshTokenAsync(string rawToken, CancellationToken ct = default)
     {
         var tokenHash = HashToken(rawToken);
         return await refreshTokenRepository.FindActiveByHashAsync(tokenHash, ct);
     }
 
+    /// <inheritdoc/>
     public async Task<RefreshToken> CreateRefreshTokenAsync(Guid userId, CancellationToken ct = default)
     {
         var rawToken = GenerateRefreshToken();
@@ -74,9 +79,11 @@ public class TokenService(IRefreshTokenRepository refreshTokenRepository, IOptio
         return refreshToken;
     }
 
+    /// <inheritdoc/>
     public Task RevokeRefreshTokenAsync(RefreshToken token, string? replacedByToken = null, CancellationToken ct = default)
         => refreshTokenRepository.RevokeAsync(token, replacedByToken, ct);
 
+    /// <inheritdoc/>
     public Task RevokeAllUserRefreshTokensAsync(Guid userId, CancellationToken ct = default)
         => refreshTokenRepository.RevokeAllForUserAsync(userId, ct);
 
@@ -84,6 +91,9 @@ public class TokenService(IRefreshTokenRepository refreshTokenRepository, IOptio
     // 即使資料庫洩漏，攻擊者也無法直接使用 hash 值冒充合法 token。
     // 注意：SHA-256 適用於高熵隨機字串（如本 token），但不適合雜湊使用者密碼
     // （密碼應使用 bcrypt/argon2 等慢速演算法）。
+    /// <summary>以 SHA-256 對 Token 字串單向雜湊，回傳 Base64 編碼的雜湊值。</summary>
+    /// <param name="token">原始明文 Token。</param>
+    /// <returns>Base64 編碼的 SHA-256 雜湊字串。</returns>
     private static string HashToken(string token)
     {
         var bytes = SHA256.HashData(Encoding.UTF8.GetBytes(token));

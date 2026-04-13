@@ -15,8 +15,13 @@ using WebTemplate.Api.Modules.Accounts.Services.Interfaces;
 
 namespace WebTemplate.Api.Infrastructure.Extensions;
 
+/// <summary>擴充 <see cref="IServiceCollection"/> 的靜態輔助類別，提供模組化的服務注冊方法。</summary>
 public static class ServiceCollectionExtensions
 {
+    /// <summary>注冊 Entity Framework Core 資料庫環境，使用 SQL Server 連線字串。</summary>
+    /// <param name="services">應用程式的服務集合。</param>
+    /// <param name="config">應用程式設定，用於讀取連線字串。</param>
+    /// <returns>同一個 <see cref="IServiceCollection"/> 以支援鏈式呼叫。</returns>
     public static IServiceCollection AddDatabase(this IServiceCollection services, IConfiguration config)
     {
         services.AddDbContext<AppDbContext>(options =>
@@ -25,6 +30,11 @@ public static class ServiceCollectionExtensions
         return services;
     }
 
+    /// <summary>注冊 JWT Bearer 驗證，並在啟動時驗證必要設定。</summary>
+    /// <param name="services">應用程式的服務集合。</param>
+    /// <param name="config">應用程式設定，必須包含 <c>Jwt</c> 區段。</param>
+    /// <returns>同一個 <see cref="IServiceCollection"/> 以支援鏈式呼叫。</returns>
+    /// <exception cref="InvalidOperationException">缺少 <c>Jwt</c> 設定區段或 Secret 為空時拋出。</exception>
     public static IServiceCollection AddJwtAuthentication(this IServiceCollection services, IConfiguration config)
     {
         // 在啟動階段立即驗證 JWT 設定，確保遺漏 Secret 時能快速失敗，
@@ -59,6 +69,9 @@ public static class ServiceCollectionExtensions
         return services;
     }
 
+    /// <summary>注冊應用程式層的 Repository 與 Service，生命週期為 Scoped。</summary>
+    /// <param name="services">應用程式的服務集合。</param>
+    /// <returns>同一個 <see cref="IServiceCollection"/> 以支援鏈式呼叫。</returns>
     public static IServiceCollection AddApplicationServices(this IServiceCollection services)
     {
         // Repositories
@@ -73,6 +86,9 @@ public static class ServiceCollectionExtensions
         return services;
     }
 
+    /// <summary>注冊 OpenAPI 文件產生器，並設定 Bearer Token 安全方案與操作安全需求。</summary>
+    /// <param name="services">應用程式的服務集合。</param>
+    /// <returns>同一個 <see cref="IServiceCollection"/> 以支援鏈式呼叫。</returns>
     public static IServiceCollection AddOpenApiWithJwt(this IServiceCollection services)
     {
         services.AddOpenApi(options =>
@@ -108,6 +124,9 @@ public static class ServiceCollectionExtensions
         return services;
     }
 
+    /// <summary>注冊速率限制器，包含 <c>auth</c>（嚴格，防暴力破解）與 <c>api</c>（寬鬆）兩個策略。</summary>
+    /// <param name="services">應用程式的服務集合。</param>
+    /// <returns>同一個 <see cref="IServiceCollection"/> 以支援鏈式呼叫。</returns>
     public static IServiceCollection AddRateLimiting(this IServiceCollection services)
     {
         services.AddRateLimiter(options =>

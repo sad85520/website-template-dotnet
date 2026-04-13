@@ -3,11 +3,17 @@ using WebTemplate.Api.Modules.Accounts.Models.Entities;
 
 namespace WebTemplate.Api.Infrastructure.Data;
 
+/// <summary>應用程式的 Entity Framework Core 資料庫環境，管理 <see cref="User"/> 與 <see cref="RefreshToken"/> 實體的存取。</summary>
 public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(options)
 {
+    /// <summary>使用者資料表的存取入口。</summary>
     public DbSet<User> Users => Set<User>();
+
+    /// <summary>Refresh Token 資料表的存取入口。</summary>
     public DbSet<RefreshToken> RefreshTokens => Set<RefreshToken>();
 
+    /// <summary>設定 Entity 的資料庫對應規則，包含索引、欄位長度與關聯約束。</summary>
+    /// <param name="modelBuilder">用於建立模型的 <see cref="ModelBuilder"/> 實例。</param>
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         base.OnModelCreating(modelBuilder);

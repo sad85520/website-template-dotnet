@@ -5,8 +5,10 @@ using WebTemplate.Api.Modules.Accounts.Services.Interfaces;
 
 namespace WebTemplate.Api.Modules.Accounts.Services;
 
+/// <summary>認證服務實作，處理登入、註冊、Token 刷新與登出邏輯，實作 <see cref="IAuthService"/>。</summary>
 public class AuthService(IUserRepository userRepository, ITokenService tokenService) : IAuthService
 {
+    /// <inheritdoc/>
     public async Task<(UserDto User, string AccessToken, string RefreshToken)> LoginAsync(
         LoginRequest request, CancellationToken ct = default)
     {
@@ -43,6 +45,7 @@ public class AuthService(IUserRepository userRepository, ITokenService tokenServ
         return (MapToDto(user), accessToken, refreshTokenEntity.TokenHash);
     }
 
+    /// <inheritdoc/>
     public async Task<UserDto> RegisterAsync(RegisterRequest request, CancellationToken ct = default)
     {
         var exists = await userRepository.ExistsByEmailAsync(request.Email, ct);
@@ -61,6 +64,7 @@ public class AuthService(IUserRepository userRepository, ITokenService tokenServ
         return MapToDto(user);
     }
 
+    /// <inheritdoc/>
     public async Task<(string AccessToken, string NewRefreshToken)> RefreshAsync(
         string refreshToken, CancellationToken ct = default)
     {
@@ -87,6 +91,7 @@ public class AuthService(IUserRepository userRepository, ITokenService tokenServ
         return (accessToken, newRefreshTokenEntity.TokenHash);
     }
 
+    /// <inheritdoc/>
     public async Task LogoutAsync(string refreshToken, CancellationToken ct = default)
     {
         var tokenEntity = await tokenService.GetActiveRefreshTokenAsync(refreshToken, ct);
@@ -94,6 +99,9 @@ public class AuthService(IUserRepository userRepository, ITokenService tokenServ
             await tokenService.RevokeRefreshTokenAsync(tokenEntity, ct: ct);
     }
 
+    /// <summary>將 <see cref="User"/> 實體對應至 <see cref="UserDto"/>；Role 轉為小寫字串。</summary>
+    /// <param name="user">來源使用者實體。</param>
+    /// <returns>對應的 <see cref="UserDto"/>。</returns>
     private static UserDto MapToDto(User user) => new()
     {
         Id = user.Id,

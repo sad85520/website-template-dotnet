@@ -3,8 +3,10 @@ using WebTemplate.Api.Common.Models;
 
 namespace WebTemplate.Api.Infrastructure.Middleware;
 
+/// <summary>全域例外處理器，將未捕獲的例外轉換為統一的 <see cref="ApiResponse{T}"/> 格式回應。</summary>
 public sealed class GlobalExceptionHandler(ILogger<GlobalExceptionHandler> logger) : IExceptionHandler
 {
+    /// <inheritdoc/>
     public async ValueTask<bool> TryHandleAsync(
         HttpContext httpContext,
         Exception exception,

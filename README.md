@@ -11,7 +11,7 @@
 | 資料庫 | MSSQL 2022 |
 | 認證 | JWT + Refresh Token (httpOnly cookie) |
 | API 文件 | Scalar / Microsoft.AspNetCore.OpenApi |
-| 程式碼品質 | ESLint, Prettier, Vitest, xUnit |
+| 程式碼品質 | ESLint, Prettier, Vitest, xUnit, Testcontainers.MsSql（整合測試） |
 | 基礎設施 | Docker Compose, Nginx, GitHub Actions, Kubernetes |
 
 ## 快速啟動
@@ -346,8 +346,17 @@ public class ProductServiceTests
 | 測試對象 | 測試方式 | 原因 |
 |---------|---------|------|
 | Service | Unit test（Mock Repository） | 業務邏輯在此，直接驗最有價值 |
-| Repository | 整合測試（In-memory DB） | 純資料存取邏輯，Mock 掉反而失去意義 |
-| Controller | 整合測試（`WebApplicationFactory`） | Controller 是薄的 HTTP 層，應測 routing、auth、middleware 的整體行為，而非 mock 後測呼叫順序 |
+| Repository / Controller | 整合測試（`WebApplicationFactory` + Testcontainers.MsSql） | 連真實 SQL Server 容器，確保 EF Core Migration、交易語意、JWT middleware 的整體行為正確；In-memory DB 不支援部分 SQL 語法且無法驗 Migration（見 [ADR-003](docs/adr/ADR-003-testcontainers-for-integration-tests.md)） |
+
+整合測試需本機或 CI 能啟動 Docker（Testcontainers 自動拉起容器並在測試完成後清理）。
+
+```bash
+# 只跑單元測試（不需 Docker）
+dotnet test --filter Category!=Integration
+
+# 只跑整合測試（需 Docker）
+dotnet test --filter Category=Integration
+```
 
 一個 `[Fact]` 只驗一件事。
 

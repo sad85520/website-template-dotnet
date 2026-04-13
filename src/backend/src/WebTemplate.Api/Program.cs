@@ -24,6 +24,7 @@ try
 
     // Services
     builder.Services.AddControllers();
+    builder.Services.Configure<RouteOptions>(o => o.LowercaseUrls = true);
     builder.Services.AddEndpointsApiExplorer();
 
     // AddProblemDetails 必須與 AddExceptionHandler 搭配，
@@ -83,7 +84,9 @@ try
                 csp.AddFrameAncestors().None();
             })));
 
-    // Scalar 專用 CSP：僅開發環境，允許 jsdelivr CDN
+    // Scalar 專用 CSP：僅開發環境啟用，允許從 jsdelivr CDN 載入 UI 資源。
+    // script-src / style-src 需包含 Self()，因為 Scalar.AspNetCore 會從本機路徑（/scalar/*.js）
+    // 提供自帶的 JS/CSS，不是全部走 CDN，缺少 Self() 會被 CSP 攔截。
     if (app.Environment.IsDevelopment())
     {
         app.UseWhen(
@@ -93,10 +96,10 @@ try
                 .AddContentSecurityPolicy(csp =>
                 {
                     csp.AddDefaultSrc().None();
-                    csp.AddScriptSrc().From("https://cdn.jsdelivr.net").UnsafeInline();
-                    csp.AddStyleSrc().From("https://cdn.jsdelivr.net").UnsafeInline();
+                    csp.AddScriptSrc().Self().From("https://cdn.jsdelivr.net").UnsafeInline();
+                    csp.AddStyleSrc().Self().From("https://cdn.jsdelivr.net").UnsafeInline();
                     csp.AddImgSrc().Self().Data().From("https:");
-                    csp.AddFontSrc().From("https://cdn.jsdelivr.net");
+                    csp.AddFontSrc().Self().From("https://cdn.jsdelivr.net");
                     csp.AddConnectSrc().Self();
                     csp.AddFrameAncestors().None();
                 })));
@@ -128,9 +131,12 @@ try
 
     await app.RunAsync();
 }
-// HostAbortedException 是 .NET 在 dotnet watch 重新啟動時主動拋出的，
-// 不屬於異常終止，過濾掉可避免產生誤導性的 Fatal 日誌。
-catch (Exception ex) when(ex is not HostAbortedException)
+// HostAbortedException 是 .NET 在 dotnet watch 重新啟動時主動拋出的，不屬於異常終止。
+// StopTheHostException 則是 WebApplicationFactory<Program> 在整合測試中用來中斷 app.RunAsync()
+// 的內部訊號，若在此被捕捉會導致測試啟動失敗（InvalidOperationException: The entry point
+// exited without ever building an IHost）；因此以類別名稱比對一併放行。
+catch (Exception ex) when (ex is not HostAbortedException
+                           && ex.GetType().Name is not "StopTheHostException")
 {
     Log.Fatal(ex, "Application terminated unexpectedly");
 }
@@ -139,6 +145,14 @@ finally
     Log.CloseAndFlush();
 }
 
+/// <summary>判斷請求路徑是否為開發用 UI 路徑（Scalar / OpenAPI），用於套用寬鬆 CSP 政策。</summary>
+/// <param name="ctx">目前的 HTTP 請求上下文。</param>
+/// <returns>路徑以 <c>/scalar</c> 或 <c>/openapi</c> 開頭時回傳 <c>true</c>。</returns>
 static bool IsDevUiPath(HttpContext ctx) =>
     ctx.Request.Path.StartsWithSegments("/scalar") ||
     ctx.Request.Path.StartsWithSegments("/openapi");
+
+// 讓 WebApplicationFactory<Program> 能夠在整合測試中解析此程式進入點。
+// top-level statements 會產生 internal Program 類別，需顯式公開以供 tests 專案參照。
+/// <summary>應用程式進入點類別，顯式宣告為 <c>public partial</c> 以允許整合測試透過 <see cref="WebApplicationFactory{TEntryPoint}"/> 載入。</summary>
+public partial class Program;

@@ -7,8 +7,9 @@ using WebTemplate.Api.Modules.Accounts.Services.Interfaces;
 
 namespace WebTemplate.Api.Modules.Accounts.Controllers;
 
+/// <summary>處理認證相關請求：註冊、登入、Token 刷新與登出。</summary>
 [ApiController]
-[Route("api/v1/auth")]
+[Route("api/v1/[controller]")]
 [EnableRateLimiting("auth")]
 public class AuthController(IAuthService authService) : ControllerBase
 {
@@ -26,6 +27,10 @@ public class AuthController(IAuthService authService) : ControllerBase
         MaxAge = TimeSpan.FromDays(7),
     };
 
+    /// <summary>建立新帳號。</summary>
+    /// <param name="request">包含 Email、密碼與顯示名稱的註冊資料。</param>
+    /// <param name="ct">取消權杖。</param>
+    /// <returns>HTTP 201 Created，包含新建使用者資料。</returns>
     [HttpPost("register")]
     public async Task<IActionResult> Register([FromBody] RegisterRequest request, CancellationToken ct)
     {
@@ -33,6 +38,10 @@ public class AuthController(IAuthService authService) : ControllerBase
         return StatusCode(StatusCodes.Status201Created, ApiResponse<UserDto>.Created(user));
     }
 
+    /// <summary>以 Email 與密碼登入，成功後發行 access token 並以 HttpOnly cookie 設定 refresh token。</summary>
+    /// <param name="request">登入憑證。</param>
+    /// <param name="ct">取消權杖。</param>
+    /// <returns>HTTP 200 OK，包含 access token 與過期秒數（<see cref="LoginResponse"/>）。</returns>
     [HttpPost("login")]
     public async Task<IActionResult> Login([FromBody] LoginRequest request, CancellationToken ct)
     {
@@ -47,6 +56,9 @@ public class AuthController(IAuthService authService) : ControllerBase
         return Ok(ApiResponse<LoginResponse>.Ok(response));
     }
 
+    /// <summary>使用 HttpOnly cookie 中的 refresh token 換取新的 access token，並輪換 refresh token。</summary>
+    /// <param name="ct">取消權杖。</param>
+    /// <returns>HTTP 200 OK 含新的 access token；cookie 不存在時回傳 401。</returns>
     [HttpPost("refresh")]
     public async Task<IActionResult> Refresh(CancellationToken ct)
     {
@@ -61,6 +73,9 @@ public class AuthController(IAuthService authService) : ControllerBase
         return Ok(ApiResponse<LoginResponse>.Ok(new LoginResponse(accessToken, 15 * 60)));
     }
 
+    /// <summary>撤銷 refresh token 並刪除客戶端 cookie，登出目前 session。</summary>
+    /// <param name="ct">取消權杖。</param>
+    /// <returns>HTTP 200 OK。</returns>
     [HttpPost("logout")]
     // Authorize 確保只有持有效 access token 的請求才能登出，
     // 防止匿名請求惡意觸發大量 token 撤銷操作。
