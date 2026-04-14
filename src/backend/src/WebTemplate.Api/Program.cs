@@ -145,14 +145,14 @@ finally
     Log.CloseAndFlush();
 }
 
-/// <summary>判斷請求路徑是否為開發用 UI 路徑（Scalar / OpenAPI），用於套用寬鬆 CSP 政策。</summary>
-/// <param name="ctx">目前的 HTTP 請求上下文。</param>
-/// <returns>路徑以 <c>/scalar</c> 或 <c>/openapi</c> 開頭時回傳 <c>true</c>。</returns>
+// 判斷請求路徑是否為開發用 UI 路徑（Scalar / OpenAPI），用於套用寬鬆 CSP 政策。
+// top-level statements 的 local function 不支援 XML doc comments。
 static bool IsDevUiPath(HttpContext ctx) =>
     ctx.Request.Path.StartsWithSegments("/scalar") ||
     ctx.Request.Path.StartsWithSegments("/openapi");
 
-// 讓 WebApplicationFactory<Program> 能夠在整合測試中解析此程式進入點。
-// top-level statements 會產生 internal Program 類別，需顯式公開以供 tests 專案參照。
-/// <summary>應用程式進入點類別，顯式宣告為 <c>public partial</c> 以允許整合測試透過 <see cref="WebApplicationFactory{TEntryPoint}"/> 載入。</summary>
+/// <summary>
+/// 應用程式進入點類別，顯式宣告為 <c>public partial</c>，
+/// 以允許整合測試透過 WebApplicationFactory 載入。
+/// </summary>
 public partial class Program;
