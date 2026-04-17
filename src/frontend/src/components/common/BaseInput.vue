@@ -16,7 +16,7 @@
 </template>
 
 <script setup lang="ts">
-  import { computed } from 'vue'
+  import { useId } from 'vue'
 
   interface Props {
     modelValue: string
@@ -34,8 +34,8 @@
 
   defineEmits<{ 'update:modelValue': [value: string] }>()
 
-  // 每次元件掛載時產生唯一 ID，確保 label 的 for 屬性與 input 的 id 正確對應，
-  // 讓點擊 label 能聚焦對應的 input（無障礙需求）。
-  // 注意：此 ID 在 SSR 環境下會造成 hydration mismatch，若需支援 SSR 應改用 useId()。
-  const inputId = computed(() => `input-${Math.random().toString(36).slice(2, 9)}`)
+  // 使用 Vue 3.5+ 內建 useId() 產生 SSR-safe、穩定且唯一的 ID，
+  // 確保 label[for] 與 input[id] 正確配對（無障礙需求），
+  // 且不會因 Math.random() 在 SSR/CSR 產生不同值而造成 hydration mismatch。
+  const inputId = useId()
 </script>

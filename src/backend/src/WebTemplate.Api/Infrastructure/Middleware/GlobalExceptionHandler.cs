@@ -1,9 +1,14 @@
 using Microsoft.AspNetCore.Diagnostics;
+using WebTemplate.Api.Common.Exceptions;
 using WebTemplate.Api.Common.Models;
 
 namespace WebTemplate.Api.Infrastructure.Middleware;
 
-/// <summary>全域例外處理器，將未捕獲的例外轉換為統一的 <see cref="ApiResponse{T}"/> 格式回應。</summary>
+/// <summary>
+/// 全域例外處理器，將未捕獲的例外轉換為統一的 <see cref="ApiResponse{T}"/> 格式回應。
+/// 採用白名單策略：僅 <see cref="AppException"/>（業務層刻意拋出、訊息已審核）會原樣揭露訊息給客戶端；
+/// 其他任何框架/第三方例外都會被轉為通用的 500 錯誤，避免 stack trace、SQL、路徑等內部細節意外洩漏。
+/// </summary>
 public sealed class GlobalExceptionHandler(ILogger<GlobalExceptionHandler> logger) : IExceptionHandler
 {
     /// <inheritdoc/>
@@ -15,18 +20,12 @@ public sealed class GlobalExceptionHandler(ILogger<GlobalExceptionHandler> logge
         logger.LogError(exception, "Unhandled exception for {Method} {Path}",
             httpContext.Request.Method, httpContext.Request.Path);
 
-        // 例外型別到 HTTP 狀態碼的對應是業務語意的約定：
-        // - 服務層拋出 UnauthorizedAccessException 代表身分驗證/授權失敗
-        // - InvalidOperationException 代表業務規則衝突（如信箱已存在）
-        // - 500 的 message 刻意使用通用文字，避免將內部錯誤細節洩漏給客戶端；
-        //   詳細資訊已透過上方 LogError 記錄於伺服器端日誌。
         var (statusCode, message) = exception switch
         {
-            UnauthorizedAccessException => (StatusCodes.Status401Unauthorized, exception.Message),
-            InvalidOperationException   => (StatusCodes.Status409Conflict, exception.Message),
-            KeyNotFoundException        => (StatusCodes.Status404NotFound, exception.Message),
-            ArgumentException           => (StatusCodes.Status400BadRequest, exception.Message),
-            _                           => (StatusCodes.Status500InternalServerError, "An unexpected error occurred.")
+            // 白名單：僅業務層明確拋出、訊息經過審核的 AppException 可原樣對外揭露。
+            AppException appEx => (appEx.StatusCode, appEx.Message),
+            // 預設：一律回傳通用訊息，詳細資訊只留在伺服器端日誌。
+            _ => (StatusCodes.Status500InternalServerError, "An unexpected error occurred.")
         };
 
         httpContext.Response.StatusCode = statusCode;

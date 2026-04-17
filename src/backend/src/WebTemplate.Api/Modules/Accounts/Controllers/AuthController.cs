@@ -1,8 +1,10 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
+using Microsoft.Extensions.Options;
 using WebTemplate.Api.Common.Models;
 using WebTemplate.Api.Modules.Accounts.Models.DTOs;
+using WebTemplate.Api.Modules.Accounts.Models.Settings;
 using WebTemplate.Api.Modules.Accounts.Services.Interfaces;
 
 namespace WebTemplate.Api.Modules.Accounts.Controllers;
@@ -11,21 +13,27 @@ namespace WebTemplate.Api.Modules.Accounts.Controllers;
 [ApiController]
 [Route("api/v1/[controller]")]
 [EnableRateLimiting("auth")]
-public class AuthController(IAuthService authService) : ControllerBase
+public class AuthController(
+    IAuthService authService,
+    IOptions<JwtSettings> jwtOptions) : ControllerBase
 {
     private const string RefreshTokenCookieName = "refreshToken";
+    private readonly JwtSettings _jwt = jwtOptions.Value;
+
     // HttpOnly：JavaScript 無法讀取此 cookie，防止 XSS 竊取 refresh token。
     // Secure：只透過 HTTPS 傳送，防止中間人攔截。
     // SameSite = Strict：跨站請求不帶此 cookie，防止 CSRF 攻擊。
-    // MaxAge 與 JwtSettings.RefreshTokenExpirationDays 需保持一致；
-    // 若只修改其中一處將導致 cookie 仍存在但 token 已過期（或反之）。
-    private static readonly CookieOptions RefreshCookieOptions = new()
+    // MaxAge 從 JwtSettings.RefreshTokenExpirationDays 讀取，確保 cookie 生命週期與 token 同步；
+    // 不再寫死於程式碼，避免設定漂移。
+    private CookieOptions BuildRefreshCookieOptions() => new()
     {
         HttpOnly = true,
         Secure = true,
         SameSite = SameSiteMode.Strict,
-        MaxAge = TimeSpan.FromDays(7),
+        MaxAge = TimeSpan.FromDays(_jwt.RefreshTokenExpirationDays),
     };
+
+    private int AccessTokenExpiresInSeconds => _jwt.AccessTokenExpirationMinutes * 60;
 
     /// <summary>建立新帳號。</summary>
     /// <param name="request">包含 Email、密碼與顯示名稱的註冊資料。</param>
@@ -47,11 +55,11 @@ public class AuthController(IAuthService authService) : ControllerBase
     {
         var (user, accessToken, refreshToken) = await authService.LoginAsync(request, ct);
 
-        Response.Cookies.Append(RefreshTokenCookieName, refreshToken, RefreshCookieOptions);
+        Response.Cookies.Append(RefreshTokenCookieName, refreshToken, BuildRefreshCookieOptions());
 
-        // ExpiresIn 以秒為單位（15 * 60 = 900 秒），與 JwtSettings.AccessTokenExpirationMinutes 對應，
+        // ExpiresIn 以秒為單位，從 JwtSettings.AccessTokenExpirationMinutes 推導，
         // 客戶端依此值設定 token 自動更新的計時器。
-        var response = new LoginResponse(accessToken, 15 * 60);
+        var response = new LoginResponse(accessToken, AccessTokenExpiresInSeconds);
 
         return Ok(ApiResponse<LoginResponse>.Ok(response));
     }
@@ -68,9 +76,9 @@ public class AuthController(IAuthService authService) : ControllerBase
 
         var (accessToken, newRefreshToken) = await authService.RefreshAsync(refreshToken, ct);
 
-        Response.Cookies.Append(RefreshTokenCookieName, newRefreshToken, RefreshCookieOptions);
+        Response.Cookies.Append(RefreshTokenCookieName, newRefreshToken, BuildRefreshCookieOptions());
 
-        return Ok(ApiResponse<LoginResponse>.Ok(new LoginResponse(accessToken, 15 * 60)));
+        return Ok(ApiResponse<LoginResponse>.Ok(new LoginResponse(accessToken, AccessTokenExpiresInSeconds)));
     }
 
     /// <summary>撤銷 refresh token 並刪除客戶端 cookie，登出目前 session。</summary>

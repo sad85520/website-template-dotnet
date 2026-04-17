@@ -1,3 +1,4 @@
+using System.ComponentModel.DataAnnotations;
 using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -37,19 +38,23 @@ public class UsersController(IUserService userService) : ControllerBase
     // 即使一般使用者持有有效 JWT，授權框架也會在此層拒絕，不會進入 service 層。
     /// <summary>分頁查詢所有使用者，僅限 Admin 角色存取。</summary>
     /// <param name="page">頁碼，從 1 開始，預設 1。</param>
-    /// <param name="limit">每頁筆數，預設 20。</param>
+    /// <param name="limit">每頁筆數，預設 20，最多 100。</param>
     /// <param name="search">可選關鍵字，比對 Email 或顯示名稱。</param>
     /// <param name="ct">取消權杖。</param>
     /// <returns>HTTP 200 OK 含分頁使用者列表。</returns>
     [HttpGet]
     [Authorize(Roles = "Admin")]
     public async Task<IActionResult> GetAll(
-        [FromQuery] int page = 1,
-        [FromQuery] int limit = 20,
+        [FromQuery][Range(1, int.MaxValue)] int page = 1,
+        [FromQuery][Range(1, 100)] int limit = 20,
         [FromQuery] string? search = null,
         CancellationToken ct = default)
     {
-        var result = await userService.GetAllAsync(page, limit, search, ct);
+        // [Range] 由 ApiController 自動回傳 400，但為防禦深度再次 clamp，
+        // 避免任何繞過 model binding 驗證的呼叫點（例如 service 層直接呼叫）產生過大查詢。
+        var safeLimit = Math.Clamp(limit, 1, 100);
+        var safePage = Math.Max(page, 1);
+        var result = await userService.GetAllAsync(safePage, safeLimit, search, ct);
         return Ok(result);
     }
 

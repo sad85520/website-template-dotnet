@@ -1,4 +1,5 @@
 using Moq;
+using WebTemplate.Api.Common.Exceptions;
 using WebTemplate.Api.Modules.Accounts.Models.DTOs;
 using WebTemplate.Api.Modules.Accounts.Models.Entities;
 using WebTemplate.Api.Modules.Accounts.Repositories;
@@ -38,9 +39,9 @@ public class AuthServiceTests
         Assert.Equal("user", result.Role);
     }
 
-    /// <summary>以相同 Email 重複呼叫 RegisterAsync 應拋出 InvalidOperationException。</summary>
+    /// <summary>以相同 Email 重複呼叫 RegisterAsync 應拋出 AppConflictException。</summary>
     [Fact]
-    public async Task RegisterAsync_DuplicateEmail_ThrowsInvalidOperationException()
+    public async Task RegisterAsync_DuplicateEmail_ThrowsAppConflictException()
     {
         using var db = TestDbContextFactory.Create();
         var userRepo = new UserRepository(db);
@@ -55,12 +56,12 @@ public class AuthServiceTests
 
         await service.RegisterAsync(request);
 
-        await Assert.ThrowsAsync<InvalidOperationException>(() => service.RegisterAsync(request));
+        await Assert.ThrowsAsync<AppConflictException>(() => service.RegisterAsync(request));
     }
 
     /// <summary>以錯誤密碼呼叫 LoginAsync 應拋出 UnauthorizedAccessException。</summary>
     [Fact]
-    public async Task LoginAsync_WithWrongPassword_ThrowsUnauthorizedAccessException()
+    public async Task LoginAsync_WithWrongPassword_ThrowsAppAuthenticationException()
     {
         using var db = TestDbContextFactory.Create();
         var userRepo = new UserRepository(db);
@@ -73,7 +74,7 @@ public class AuthServiceTests
             DisplayName = "User",
         });
 
-        await Assert.ThrowsAsync<UnauthorizedAccessException>(() =>
+        await Assert.ThrowsAsync<AppAuthenticationException>(() =>
             service.LoginAsync(new LoginRequest
             {
                 Email = "login@example.com",
@@ -132,7 +133,7 @@ public class AuthServiceTests
 
         for (var i = 0; i < 5; i++)
         {
-            await Assert.ThrowsAsync<UnauthorizedAccessException>(() =>
+            await Assert.ThrowsAsync<AppAuthenticationException>(() =>
                 service.LoginAsync(new LoginRequest
                 {
                     Email = "lockout@example.com",
@@ -140,7 +141,7 @@ public class AuthServiceTests
                 }));
         }
 
-        var ex = await Assert.ThrowsAsync<UnauthorizedAccessException>(() =>
+        var ex = await Assert.ThrowsAsync<AppAuthenticationException>(() =>
             service.LoginAsync(new LoginRequest
             {
                 Email = "lockout@example.com",
@@ -152,7 +153,7 @@ public class AuthServiceTests
 
     /// <summary>LockoutUntil 未過期的帳號即使密碼正確也應拋出含 "locked" 字樣的 UnauthorizedAccessException。</summary>
     [Fact]
-    public async Task LoginAsync_WithLockedAccount_ThrowsUnauthorizedAccessException()
+    public async Task LoginAsync_WithLockedAccount_ThrowsAppAuthenticationException()
     {
         using var db = TestDbContextFactory.Create();
         var userRepo = new UserRepository(db);
@@ -168,7 +169,7 @@ public class AuthServiceTests
         db.Users.Add(user);
         await db.SaveChangesAsync();
 
-        var ex = await Assert.ThrowsAsync<UnauthorizedAccessException>(() =>
+        var ex = await Assert.ThrowsAsync<AppAuthenticationException>(() =>
             service.LoginAsync(new LoginRequest
             {
                 Email = "locked@example.com",

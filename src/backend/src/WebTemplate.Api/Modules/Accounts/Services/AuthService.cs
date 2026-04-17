@@ -1,5 +1,7 @@
+using WebTemplate.Api.Common.Exceptions;
 using WebTemplate.Api.Modules.Accounts.Models.DTOs;
 using WebTemplate.Api.Modules.Accounts.Models.Entities;
+using WebTemplate.Api.Modules.Accounts.Models.Mappings;
 using WebTemplate.Api.Modules.Accounts.Repositories.Interfaces;
 using WebTemplate.Api.Modules.Accounts.Services.Interfaces;
 
@@ -15,10 +17,10 @@ public class AuthService(IUserRepository userRepository, ITokenService tokenServ
         // 找不到使用者時回傳與密碼錯誤相同的訊息，
         // 防止攻擊者透過不同錯誤訊息枚舉（enumerate）已存在的帳號。
         var user = await userRepository.FindByEmailAsync(request.Email, ct)
-            ?? throw new UnauthorizedAccessException("Invalid email or password.");
+            ?? throw new AppAuthenticationException("Invalid email or password.");
 
         if (user.LockoutUntil > DateTime.UtcNow)
-            throw new UnauthorizedAccessException("Account is temporarily locked. Try again later.");
+            throw new AppAuthenticationException("Account is temporarily locked. Try again later.");
 
         // 密碼驗證失敗時遞增計數並在達到閾值時鎖定帳號，
         // 實作軟性帳號鎖定（soft lockout）以對抗暴力破解。
@@ -30,7 +32,7 @@ public class AuthService(IUserRepository userRepository, ITokenService tokenServ
             if (user.FailedLoginAttempts >= 5)
                 user.LockoutUntil = DateTime.UtcNow.AddMinutes(15);
             await userRepository.SaveChangesAsync(ct);
-            throw new UnauthorizedAccessException("Invalid email or password.");
+            throw new AppAuthenticationException("Invalid email or password.");
         }
 
         user.FailedLoginAttempts = 0;
@@ -42,7 +44,7 @@ public class AuthService(IUserRepository userRepository, ITokenService tokenServ
 
         // CreateRefreshTokenAsync 回傳的實體，其 TokenHash 欄位已被替換為原始（明文）token，
         // 此為刻意設計：service 層對外暴露明文，資料庫中只存 hash。
-        return (MapToDto(user), accessToken, refreshTokenEntity.TokenHash);
+        return (user.ToDto(), accessToken, refreshTokenEntity.TokenHash);
     }
 
     /// <inheritdoc/>
@@ -50,7 +52,7 @@ public class AuthService(IUserRepository userRepository, ITokenService tokenServ
     {
         var exists = await userRepository.ExistsByEmailAsync(request.Email, ct);
         if (exists)
-            throw new InvalidOperationException("Email is already registered.");
+            throw new AppConflictException("Email is already registered.");
 
         var user = new User
         {
@@ -61,7 +63,7 @@ public class AuthService(IUserRepository userRepository, ITokenService tokenServ
 
         await userRepository.CreateAsync(user, ct);
 
-        return MapToDto(user);
+        return user.ToDto();
     }
 
     /// <inheritdoc/>
@@ -69,16 +71,23 @@ public class AuthService(IUserRepository userRepository, ITokenService tokenServ
         string refreshToken, CancellationToken ct = default)
     {
         var tokenEntity = await tokenService.GetActiveRefreshTokenAsync(refreshToken, ct)
-            ?? throw new UnauthorizedAccessException("Invalid or expired refresh token.");
+            ?? throw new AppAuthenticationException("Invalid or expired refresh token.");
 
         // Refresh Token Rotation 安全機制：
-        // FindActiveByHash 僅用 hash 比對，若找到的 token 已被撤銷（IsActive = false），
-        // 代表有人持有舊 token 嘗試重用（可能是 token 竊取後的重放攻擊），
-        // 此時應撤銷該使用者所有 session 強制重新登入，降低損害範圍。
-        if (!tokenEntity.IsActive)
+        // 必須嚴格區分「已撤銷（IsRevoked）」與「已過期（IsExpired）」兩種情境：
+        // - IsRevoked：代表該 token 已被輪換掉（或遭強制撤銷），若仍被重用，視為竊取重放攻擊，
+        //   應立即撤銷該使用者所有 session 強制重新登入，降低損害範圍。
+        // - IsExpired：僅為 token 自然過期，屬正常失效路徑，只需要求使用者重新登入即可，
+        //   不應連帶撤銷其他仍有效的 session（否則會在同步過期窗口誤殺所有裝置）。
+        if (tokenEntity.IsRevoked)
         {
             await tokenService.RevokeAllUserRefreshTokensAsync(tokenEntity.UserId, ct);
-            throw new UnauthorizedAccessException("Refresh token has been reused. All sessions revoked.");
+            throw new AppAuthenticationException("Refresh token has been reused. All sessions revoked.");
+        }
+
+        if (tokenEntity.IsExpired)
+        {
+            throw new AppAuthenticationException("Refresh token has expired. Please log in again.");
         }
 
         // 先建立新 token，再撤銷舊 token，並將舊 token 的 ReplacedByToken 指向新 token，
@@ -99,15 +108,4 @@ public class AuthService(IUserRepository userRepository, ITokenService tokenServ
             await tokenService.RevokeRefreshTokenAsync(tokenEntity, ct: ct);
     }
 
-    /// <summary>將 <see cref="User"/> 實體對應至 <see cref="UserDto"/>；Role 轉為小寫字串。</summary>
-    /// <param name="user">來源使用者實體。</param>
-    /// <returns>對應的 <see cref="UserDto"/>。</returns>
-    private static UserDto MapToDto(User user) => new()
-    {
-        Id = user.Id,
-        Email = user.Email,
-        DisplayName = user.DisplayName,
-        Role = user.Role.ToString().ToLowerInvariant(),
-        CreatedAt = user.CreatedAt,
-    };
 }
