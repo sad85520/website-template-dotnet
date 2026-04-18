@@ -15,7 +15,7 @@ spec:
     spec:
       containers:
         - name: frontend
-          image: ghcr.io/sad85520/website-template-dotnet/frontend:sha-46793ff
+          image: ghcr.io/sad85520/website-template-dotnet/frontend:sha-ec8c2b5
           ports:
             - containerPort: 8080
           securityContext:
