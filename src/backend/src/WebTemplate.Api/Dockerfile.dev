@@ -1,3 +1,10 @@
+# Dev image：僅供 docker-compose.yml（非 prod overlay）使用。
+# 與 prod Dockerfile 的差異：
+#   - 基底用 sdk:10.0（非 aspnet:10.0）：`dotnet watch run` 需要 SDK + roslyn。
+#   - 不 COPY / 不 build：compose 以 `./src/backend:/app` bind-mount 蓋上來，
+#     讓檔案改動後 `dotnet watch` 能自動重建/重啟。
+#   - 不切 non-root：dev 方便性優先（讀寫 bind mount 的 obj/bin 不會卡權限）。
+# 如需 prod image（多階段 build + non-root + publish），請用 src/WebTemplate.Api/Dockerfile。
 FROM mcr.microsoft.com/dotnet/sdk:10.0
 
 WORKDIR /app
