@@ -20,12 +20,22 @@ public static class ServiceCollectionExtensions
 {
     /// <summary>注冊 Entity Framework Core 資料庫環境，使用 SQL Server 連線字串。</summary>
     /// <param name="services">應用程式的服務集合。</param>
-    /// <param name="config">應用程式設定，用於讀取連線字串。</param>
+    /// <param name="config">應用程式設定，必須包含 <c>ConnectionStrings:DefaultConnection</c>。</param>
     /// <returns>同一個 <see cref="IServiceCollection"/> 以支援鏈式呼叫。</returns>
+    /// <exception cref="InvalidOperationException">遺漏或為空的 <c>DefaultConnection</c> 連線字串會在啟動階段拋出。</exception>
     public static IServiceCollection AddDatabase(this IServiceCollection services, IConfiguration config)
     {
+        // 與 AddJwtAuthentication 同樣的 fail-fast 策略：在啟動時驗證連線字串必填，
+        // 避免 production 誤用空字串時，EF Core 在第一個請求才拋出晦澀的連線錯誤
+        // （SqlException: "A network-related or instance-specific error..."），
+        // 或在 dev 環境誤連到 localhost 預設 instance 而看似能跑但資料寫錯地方。
+        var connectionString = config.GetConnectionString("DefaultConnection");
+        if (string.IsNullOrWhiteSpace(connectionString))
+            throw new InvalidOperationException(
+                "Database connection string is not configured. Set 'ConnectionStrings:DefaultConnection' in configuration.");
+
         services.AddDbContext<AppDbContext>(options =>
-            options.UseSqlServer(config.GetConnectionString("DefaultConnection")));
+            options.UseSqlServer(connectionString));
 
         return services;
     }
