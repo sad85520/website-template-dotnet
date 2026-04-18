@@ -10,17 +10,28 @@ env:
   REGISTRY: ghcr.io
   IMAGE_PREFIX: ${{ github.repository }}
 
+# 防止同分支多次 staging deploy 交錯，導致 git push 互相覆蓋或製造無意義的 race。
+# `cancel-in-progress: false` 確保正在進行的 commit/push 不會被中斷成半提交狀態。
+concurrency:
+  group: cd-staging-${{ github.ref }}
+  cancel-in-progress: false
+
 jobs:
   build-and-push:
     name: Build & Push Docker Images
     runs-on: ubuntu-latest
     if: ${{ github.event.workflow_run.conclusion == 'success' }}
+    # 最小權限：build job 只需讀取原始碼 + 推 image 到 ghcr。
     permissions:
       contents: read
       packages: write
 
     steps:
       - uses: actions/checkout@v4
+        with:
+          # 不在 workspace 留下帶 token 的 .git/config，降低後續 step（例如
+          # `docker build` 帶的使用者腳本）竊取 token 的風險。
+          persist-credentials: false
 
       - name: Log in to GitHub Container Registry
         uses: docker/login-action@v3
@@ -65,10 +76,42 @@ jobs:
           tags: ${{ steps.meta-backend.outputs.tags }}
           labels: ${{ steps.meta-backend.outputs.labels }}
 
-  deploy-staging:
-    name: Deploy to Staging
+  # 只負責「改 manifest 檔」的純讀取 job，產出 artifact 供下一個 write job 消費。
+  # 把 sed / 字串組裝這類較複雜的邏輯留在 contents:read 的 job，讓真正拿到
+  # contents:write 的 job 只跑最小限度的 git commit + push 指令，降低攻擊面。
+  prepare-staging-manifests:
+    name: Prepare Staging Manifests
     runs-on: ubuntu-latest
     needs: build-and-push
+    permissions:
+      contents: read
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Update image tags in staging K8S manifests
+        run: |
+          SHORT_SHA=$(echo "${{ github.sha }}" | cut -c1-7)
+          sed -i "s|image: ghcr.io/.*/frontend:.*|image: ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}/frontend:sha-${SHORT_SHA}|g" infra/k8s/frontend/deployment.yml
+          sed -i "s|image: ghcr.io/.*/backend:.*|image: ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}/backend:sha-${SHORT_SHA}|g" infra/k8s/backend/deployment.yml
+
+      - name: Upload updated manifests
+        uses: actions/upload-artifact@v4
+        with:
+          name: staging-manifests
+          path: infra/k8s/
+          retention-days: 1
+
+  # 只做 git commit + push，不做任何其他邏輯。即使未來 prepare job 被注入
+  # 惡意內容，此 job 也只是把 artifact 內容原樣 commit，沒有執行任意 shell 的空間。
+  # Branch protection 的設定要求：main 需允許 github-actions[bot] bypass
+  # （或另設 deploy key），否則此步驟會失敗——這是預期行為，強迫保護規則就位。
+  commit-staging-manifests:
+    name: Commit Staging Manifests
+    runs-on: ubuntu-latest
+    needs: prepare-staging-manifests
     environment: staging
     permissions:
       contents: write
@@ -78,13 +121,13 @@ jobs:
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Update image tags in staging K8S manifests
-        run: |
-          SHORT_SHA=$(echo "${{ github.sha }}" | cut -c1-7)
-          sed -i "s|image: ghcr.io/.*/frontend:.*|image: ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}/frontend:sha-${SHORT_SHA}|g" infra/k8s/frontend/deployment.yml
-          sed -i "s|image: ghcr.io/.*/backend:.*|image: ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}/backend:sha-${SHORT_SHA}|g" infra/k8s/backend/deployment.yml
+      - name: Download updated manifests
+        uses: actions/download-artifact@v4
+        with:
+          name: staging-manifests
+          path: infra/k8s/
 
-      - name: Commit updated staging manifests
+      - name: Commit & push
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
@@ -92,7 +135,18 @@ jobs:
           git diff --staged --quiet || git commit -m "chore: update staging k8s image tags to sha-$(echo '${{ github.sha }}' | cut -c1-7)"
           git push
 
-      - name: Signal QA — flip ready-for-ci to ready-for-qa
+  # QA 標籤流程獨立成 job，只拿 pull-requests / issues 的 write 權限，
+  # 不碰 contents。label 流程失敗不影響 manifest 已 commit 的事實。
+  signal-qa:
+    name: Signal QA — flip ready-for-ci to ready-for-qa
+    runs-on: ubuntu-latest
+    needs: commit-staging-manifests
+    permissions:
+      pull-requests: write
+      issues: write
+
+    steps:
+      - name: Flip labels on merged PR and linked issues
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
@@ -103,7 +157,6 @@ jobs:
           fi
           echo "Flipping labels on PR #$PR_NUMBER"
           gh pr edit "$PR_NUMBER" --add-label "ready-for-qa" --remove-label "ready-for-ci" --repo "${{ github.repository }}" || true
-          # Propagate to linked issues (Closes #NN in body)
           gh pr view "$PR_NUMBER" --json body --jq '.body' --repo "${{ github.repository }}" \
             | grep -oiE '(close[sd]?|fix(es|ed)?|resolve[sd]?) #[0-9]+' \
             | grep -oE '[0-9]+' \

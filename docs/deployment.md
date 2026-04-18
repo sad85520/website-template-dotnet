@@ -99,6 +99,29 @@ gh workflow run cd-production.yml
 
 也可在 GitHub Actions 頁面 → 選擇「CD — Deploy Production」→ 點「Run workflow」。
 
+### CD workflow 安全模型
+
+CD workflow 的權限以 job 為單位最小化，避免單一 job 同時拿「原始碼寫入」與「任意 shell 執行」：
+
+| Job | `permissions` | 職責 |
+|------|---------------|------|
+| `build-and-push` | `contents: read`, `packages: write` | Docker build + push GHCR；不得寫 repo |
+| `prepare-staging-manifests` / `prepare-production-manifests` | `contents: read` | 執行 `sed` 改 `infra/k8s/*.yml`，上傳 artifact |
+| `commit-staging-manifests` / `commit-production-manifests` | `contents: write` | 僅 `git commit` + `git push`，不執行其他邏輯 |
+| `signal-qa` | `pull-requests: write`, `issues: write` | QA 標籤流程；無 `contents:write` |
+
+「將 sed 留在 read-only job，write job 只 commit artifact」是刻意設計：即使 prepare job 被惡意 PR 注入 shell 指令，攻擊者能改檔但無法自己 push，需 write job 下一輪才會被 commit，給 branch protection 多一層攔截空間。
+
+### Branch protection 必要設定
+
+`commit-*-manifests` 需 push to main，部署前請先在 GitHub Repository Settings → Branches → main 設定：
+
+- ✅ Require a pull request before merging（保護 main 不被一般 push 覆蓋）
+- ✅ Require status checks to pass（至少要求 CI workflow 成功）
+- ✅ 允許 `github-actions[bot]` bypass（或另設 deploy key），否則 CD 的 `git push` 會被擋
+
+如果不想放行 bot push，替代方案是改寫 CD 成「開 PR 讓人審 + 合併」——對 template 而言成本過高，預設走 bot push + branch protection 的組合。
+
 手動更新 K8S image：
 ```bash
 kubectl set image deployment/backend backend=ghcr.io/your-org/website-template-dotnet/backend:sha-abc1234 -n web-template
