@@ -60,11 +60,20 @@ jobs:
       - name: Restore dependencies
         run: dotnet restore WebTemplate.sln
 
+      - name: Format check
+        run: dotnet format WebTemplate.sln --verify-no-changes --no-restore
+
       - name: Build
         run: dotnet build WebTemplate.sln --no-restore -c Release
 
-      - name: Test
-        run: dotnet test WebTemplate.sln --no-build -c Release --verbosity normal --collect:"XPlat Code Coverage"
+      - name: Test with coverage
+        run: dotnet test WebTemplate.sln --no-build -c Release --verbosity normal --collect:"XPlat Code Coverage" --results-directory ./TestResults
+
+      - name: Upload coverage
+        uses: codecov/codecov-action@v4
+        with:
+          directory: src/backend/TestResults
+        continue-on-error: true
 
   secrets-scan:
     runs-on: ubuntu-latest

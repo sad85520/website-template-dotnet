@@ -1,5 +1,8 @@
 <template>
-  <form class="space-y-4" @submit.prevent="handleSubmit">
+  <form
+    class="space-y-4"
+    @submit.prevent="handleSubmit"
+  >
     <BaseInput
       v-model="form.email"
       type="email"
@@ -16,7 +19,13 @@
       :error="errors.password"
       required
     />
-    <BaseButton type="submit" :loading="isLoading" class="w-full">登入</BaseButton>
+    <BaseButton
+      type="submit"
+      :loading="isLoading"
+      class="w-full"
+    >
+      登入
+    </BaseButton>
   </form>
 </template>
 

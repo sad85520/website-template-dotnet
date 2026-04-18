@@ -10,8 +10,8 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
-    "lint": "eslint . --ext .vue,.ts,.tsx",
-    "lint:fix": "eslint . --ext .vue,.ts,.tsx --fix",
+    "lint": "eslint .",
+    "lint:fix": "eslint . --fix",
     "type-check": "vue-tsc --noEmit",
     "format": "prettier --write \"src/**/*.{vue,ts,tsx,css}\""
   },

@@ -78,3 +78,6 @@ dotnet ef migrations add AddYourTableName --project src/WebTemplate.Api
 | `DB_PASSWORD` | 是 | MSSQL SA 密碼，須包含大小寫字母、數字、特殊字元 |
 | `JWT_SECRET` | 是 | JWT 簽署金鑰，至少 32 字元 |
 | `ASPNETCORE_ENVIRONMENT` | 否 | 預設 Development |
+| `AllowedHosts` | 生產必填 | 分號分隔（例：`api.example.com;www.example.com`）；未設即 400 |
+
+> 生產覆寫慣例（`ConnectionStrings__DefaultConnection` / `Jwt__Secret` / `Jwt__Issuer` / `Jwt__Audience` / `Serilog__*`）與容器 non-root、8080 連接埠、k8s securityContext 細節見 [deployment.md](deployment.md#生產環境變數)。

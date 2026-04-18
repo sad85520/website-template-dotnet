@@ -1,5 +1,8 @@
 <template>
-  <form class="space-y-4" @submit.prevent="handleSubmit">
+  <form
+    class="space-y-4"
+    @submit.prevent="handleSubmit"
+  >
     <BaseInput
       v-model="form.displayName"
       label="顯示名稱"
@@ -23,7 +26,13 @@
       :error="errors.password"
       required
     />
-    <BaseButton type="submit" :loading="isLoading" class="w-full">建立帳號</BaseButton>
+    <BaseButton
+      type="submit"
+      :loading="isLoading"
+      class="w-full"
+    >
+      建立帳號
+    </BaseButton>
   </form>
 </template>
 

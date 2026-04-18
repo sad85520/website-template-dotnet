@@ -1,6 +1,10 @@
 <template>
   <div>
-    <label v-if="label" :for="inputId" class="label">{{ label }}</label>
+    <label
+      v-if="label"
+      :for="inputId"
+      class="label"
+    >{{ label }}</label>
     <input
       :id="inputId"
       :type="type"
@@ -10,8 +14,13 @@
       :class="['input', error ? 'border-red-500 focus:border-red-500 focus:ring-red-500' : '']"
       v-bind="$attrs"
       @input="$emit('update:modelValue', ($event.target as HTMLInputElement).value)"
-    />
-    <p v-if="error" class="mt-1 text-xs text-red-600">{{ error }}</p>
+    >
+    <p
+      v-if="error"
+      class="mt-1 text-xs text-red-600"
+    >
+      {{ error }}
+    </p>
   </div>
 </template>
 
@@ -29,7 +38,10 @@
 
   withDefaults(defineProps<Props>(), {
     type: 'text',
+    label: '',
+    placeholder: '',
     disabled: false,
+    error: '',
   })
 
   defineEmits<{ 'update:modelValue': [value: string] }>()

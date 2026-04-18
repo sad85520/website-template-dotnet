@@ -1,7 +1,7 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import { authApi } from '@/api'
-import type { UserDto, LoginRequest, RegisterRequest } from '@/types'
+import type { ApiResponse, LoginRequest, LoginResponse, RegisterRequest, UserDto } from '@/types'
 
 export const useAuthStore = defineStore('auth', () => {
   // accessToken 僅存於記憶體（Pinia reactive state），不存入 localStorage，
@@ -12,16 +12,16 @@ export const useAuthStore = defineStore('auth', () => {
 
   const isAuthenticated = computed(() => !!accessToken.value)
 
-  function setAccessToken(token: string) {
+  function setAccessToken(token: string): void {
     accessToken.value = token
   }
 
-  function clearAuth() {
+  function clearAuth(): void {
     accessToken.value = null
     currentUser.value = null
   }
 
-  async function login(credentials: LoginRequest) {
+  async function login(credentials: LoginRequest): Promise<ApiResponse<LoginResponse>> {
     isLoading.value = true
     try {
       const response = await authApi.login(credentials)
@@ -35,7 +35,7 @@ export const useAuthStore = defineStore('auth', () => {
     }
   }
 
-  async function register(data: RegisterRequest) {
+  async function register(data: RegisterRequest): Promise<ApiResponse<UserDto>> {
     isLoading.value = true
     try {
       const response = await authApi.register(data)
@@ -45,7 +45,7 @@ export const useAuthStore = defineStore('auth', () => {
     }
   }
 
-  async function logout() {
+  async function logout(): Promise<void> {
     try {
       await authApi.logout()
     } finally {
@@ -55,7 +55,7 @@ export const useAuthStore = defineStore('auth', () => {
     }
   }
 
-  async function fetchCurrentUser() {
+  async function fetchCurrentUser(): Promise<void> {
     const response = await authApi.getMe()
     if (response.data.success && response.data.data) {
       currentUser.value = response.data.data

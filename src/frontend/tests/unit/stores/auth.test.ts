@@ -63,4 +63,69 @@ describe('useAuthStore', () => {
 
     expect(store.isAuthenticated).toBe(false)
   })
+
+  it('註冊回傳 envelope', async () => {
+    const mockUser = { id: '2', email: 'new@example.com', displayName: 'New', role: 'user' as const, createdAt: '2024-01-01' }
+    vi.mocked(authApi.register).mockResolvedValue({
+      data: { success: true, data: mockUser, message: null, errors: null, meta: null },
+    } as any)
+
+    const store = useAuthStore()
+    const result = await store.register({ email: 'new@example.com', password: 'Password123!', displayName: 'New' } as any)
+
+    expect(result.success).toBe(true)
+    expect(result.data).toEqual(mockUser)
+  })
+
+  it('tryRefreshToken 成功時恢復狀態', async () => {
+    const mockUser = { id: '1', email: 'test@example.com', displayName: 'Test', role: 'user' as const, createdAt: '2024-01-01' }
+
+    vi.mocked(authApi.refresh).mockResolvedValue({
+      data: { success: true, data: { accessToken: 'new-token', expiresIn: 900 }, message: null, errors: null, meta: null },
+    } as any)
+    vi.mocked(authApi.getMe).mockResolvedValue({
+      data: { success: true, data: mockUser, message: null, errors: null, meta: null },
+    } as any)
+
+    const store = useAuthStore()
+    const ok = await store.tryRefreshToken()
+
+    expect(ok).toBe(true)
+    expect(store.accessToken).toBe('new-token')
+    expect(store.currentUser).toEqual(mockUser)
+  })
+
+  it('tryRefreshToken envelope 成功但無 data 時回 false', async () => {
+    vi.mocked(authApi.refresh).mockResolvedValue({
+      data: { success: false, data: null, message: 'expired', errors: null, meta: null },
+    } as any)
+
+    const store = useAuthStore()
+    const ok = await store.tryRefreshToken()
+
+    expect(ok).toBe(false)
+  })
+
+  it('tryRefreshToken 拋錯時清除狀態並回 false', async () => {
+    vi.mocked(authApi.refresh).mockRejectedValue(new Error('network'))
+
+    const store = useAuthStore()
+    store.setAccessToken('stale')
+    const ok = await store.tryRefreshToken()
+
+    expect(ok).toBe(false)
+    expect(store.isAuthenticated).toBe(false)
+  })
+
+  it('login envelope 失敗時不更新 token', async () => {
+    vi.mocked(authApi.login).mockResolvedValue({
+      data: { success: false, data: null, message: '帳密錯誤', errors: null, meta: null },
+    } as any)
+
+    const store = useAuthStore()
+    const result = await store.login({ email: 'bad@example.com', password: 'bad' })
+
+    expect(result.success).toBe(false)
+    expect(store.accessToken).toBeNull()
+  })
 })

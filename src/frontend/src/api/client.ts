@@ -74,7 +74,12 @@ apiClient.interceptors.response.use(
         { withCredentials: true }
       )
 
-      const newToken = response.data.data?.accessToken ?? ''
+      const newToken = response.data.data?.accessToken
+      if (!newToken) {
+        // refresh 回 200 但沒有 token — 後端契約異常。不要以空字串帶入 Authorization
+        // 而讓請求繼續重試（會導致無限 401 迴圈），改為 throw 交給下方 catch 清 auth state。
+        throw new Error('Refresh response did not contain an access token.')
+      }
       const authStore = useAuthStore()
       authStore.setAccessToken(newToken)
 

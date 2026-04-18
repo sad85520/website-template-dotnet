@@ -1,4 +1,4 @@
-.PHONY: dev dev-build stop clean test migrate frontend-test backend-test
+.PHONY: dev dev-d dev-build stop clean test lint frontend-test backend-test frontend-lint backend-lint migrate migration ps logs
 
 # 啟動開發環境（前景）
 dev:
@@ -30,6 +30,17 @@ backend-test:
 
 # 執行所有測試
 test: frontend-test backend-test
+
+# 前端 lint
+frontend-lint:
+	docker compose run --rm frontend pnpm lint
+
+# 後端 format 檢查（對齊 CI 的 dotnet format --verify-no-changes）
+backend-lint:
+	docker compose run --rm backend dotnet format WebTemplate.sln --verify-no-changes
+
+# 所有 lint
+lint: frontend-lint backend-lint
 
 # 執行 EF Core Migration
 migrate:

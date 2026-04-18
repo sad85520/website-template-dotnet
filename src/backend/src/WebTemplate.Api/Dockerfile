@@ -14,11 +14,22 @@ FROM build AS publish
 RUN dotnet publish src/WebTemplate.Api/WebTemplate.Api.csproj -c Release --no-build -o /app/publish
 
 # ---- Runtime Stage ----
+# Base image ships a non-root `app` user (UID 1654). Don't recreate it:
+# UID 1000 is already taken by `ubuntu` on this base, and the built-in user
+# is MS's recommended non-root default.
 FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS runtime
 WORKDIR /app
-COPY --from=publish /app/publish .
+
+COPY --from=publish --chown=app:app /app/publish .
+
+USER app
 
 EXPOSE 8080
 ENV ASPNETCORE_URLS=http://+:8080
+
+# Docker HEALTHCHECK intentionally omitted: the aspnet runtime image does not
+# ship curl/wget, and pulling one in just for a healthcheck bloats the image.
+# k8s livenessProbe/readinessProbe (see infra/k8s/backend/deployment.yml) hit
+# /health and /health/ready directly via HTTP and are the source of truth.
 
 ENTRYPOINT ["dotnet", "WebTemplate.Api.dll"]
