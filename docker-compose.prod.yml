@@ -3,7 +3,10 @@ services:
     build:
       context: ./src/backend
       dockerfile: src/WebTemplate.Api/Dockerfile
-    volumes: []
+    # !reset is required: compose v2 merges list-typed fields additively, so
+    # `volumes: []` on its own would not remove base's `./src/backend:/app`
+    # bind mount — which would mask the published /app at runtime.
+    volumes: !reset []
     environment:
       ASPNETCORE_ENVIRONMENT: Production
 
@@ -11,7 +14,11 @@ services:
     build:
       context: ./src/frontend
       dockerfile: Dockerfile
-    volumes: []
+    # Same reason as backend: need !reset to drop base's dev bind mounts.
+    volumes: !reset []
+    # Drop base's `5173:5173` (Vite dev). In prod the outer nginx reverse-proxies
+    # to frontend over the compose network; no need to publish a host port.
+    ports: !reset []
 
   nginx:
     volumes:
