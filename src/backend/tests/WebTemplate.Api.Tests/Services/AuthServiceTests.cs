@@ -96,7 +96,9 @@ public class AuthServiceTests
 
         _tokenServiceMock
             .Setup(t => t.CreateRefreshTokenAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new RefreshToken { TokenHash = "refresh-token", ExpiresAt = DateTime.UtcNow.AddDays(7) });
+            .ReturnsAsync(new RefreshTokenPair(
+                new RefreshToken { TokenHash = "refresh-hash", ExpiresAt = DateTime.UtcNow.AddDays(7) },
+                "refresh-token"));
 
         await service.RegisterAsync(new RegisterRequest
         {
@@ -193,7 +195,9 @@ public class AuthServiceTests
 
         _tokenServiceMock
             .Setup(t => t.CreateRefreshTokenAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new RefreshToken { TokenHash = "refresh-token", ExpiresAt = DateTime.UtcNow.AddDays(7) });
+            .ReturnsAsync(new RefreshTokenPair(
+                new RefreshToken { TokenHash = "refresh-hash", ExpiresAt = DateTime.UtcNow.AddDays(7) },
+                "refresh-token"));
 
         var user = new User
         {

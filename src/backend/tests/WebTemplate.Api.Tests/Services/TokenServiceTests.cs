@@ -79,11 +79,13 @@ public class TokenServiceTests
         await db.SaveChangesAsync();
 
         var result = await service.CreateRefreshTokenAsync(user.Id);
-        var rawToken = result.TokenHash;
+        var rawToken = result.RawToken;
 
         Assert.False(string.IsNullOrWhiteSpace(rawToken));
+        // Entity.TokenHash 永遠是資料庫格式（hash），不應等於明文。
+        Assert.NotEqual(rawToken, result.Entity.TokenHash);
 
-        var stored = await db.RefreshTokens.FindAsync(result.Id);
+        var stored = await db.RefreshTokens.FindAsync(result.Entity.Id);
         Assert.NotNull(stored);
         Assert.NotEqual(rawToken, stored.TokenHash);
 
