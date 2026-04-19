@@ -137,33 +137,65 @@ public static class ServiceCollectionExtensions
     /// <summary>注冊速率限制器，包含 <c>auth</c>（嚴格，防暴力破解）與 <c>api</c>（寬鬆）兩個策略。</summary>
     /// <param name="services">應用程式的服務集合。</param>
     /// <returns>同一個 <see cref="IServiceCollection"/> 以支援鏈式呼叫。</returns>
+    /// <remarks>
+    /// 使用 <c>AddPolicy</c> + <c>PartitionedRateLimiter</c>，以每個 client 的識別碼（已登入時以 user id；
+    /// 未登入時以 remote IP）做 partition，讓每個 client 擁有獨立的配額桶；改回 <c>AddFixedWindowLimiter(name, ...)</c>
+    /// 會讓整個策略共用單一全域桶，任一攻擊者打滿即拒絕全部使用者（DoS 全站認證）。
+    /// <para>
+    /// 反向代理部署情境：若 API 位於 nginx / ingress 之後，<c>RemoteIpAddress</c> 會是 proxy 的 IP，
+    /// 等同於所有使用者共用同一個 partition。生產環境必須先啟用 <c>ForwardedHeaders</c> 並設定受信任的
+    /// proxy 白名單，才能讓 partition key 真正反映最終使用者來源。
+    /// </para>
+    /// </remarks>
     public static IServiceCollection AddRateLimiting(this IServiceCollection services)
     {
         services.AddRateLimiter(options =>
         {
             // "auth" 策略：限制登入/註冊端點，防止暴力破解。
-            // QueueLimit = 0 表示超出限制的請求直接拒絕，不排隊等候。
-            options.AddFixedWindowLimiter("auth", limiter =>
-            {
-                limiter.PermitLimit = 10;
-                limiter.Window = TimeSpan.FromMinutes(1);
-                limiter.QueueProcessingOrder = QueueProcessingOrder.OldestFirst;
-                limiter.QueueLimit = 0;
-            });
+            // QueueLimit = 0 表示超出限制的請求直接拒絕,不排隊等候。
+            options.AddPolicy("auth", httpContext =>
+                RateLimitPartition.GetFixedWindowLimiter(
+                    partitionKey: GetPartitionKey(httpContext),
+                    factory: _ => new FixedWindowRateLimiterOptions
+                    {
+                        PermitLimit = 10,
+                        Window = TimeSpan.FromMinutes(1),
+                        QueueProcessingOrder = QueueProcessingOrder.OldestFirst,
+                        QueueLimit = 0,
+                    }));
 
             // "api" 策略：一般 API 的寬鬆限制，與 "auth" 分開設定，
             // 讓認證端點可以有更嚴格的獨立配額。
-            options.AddFixedWindowLimiter("api", limiter =>
-            {
-                limiter.PermitLimit = 60;
-                limiter.Window = TimeSpan.FromMinutes(1);
-                limiter.QueueProcessingOrder = QueueProcessingOrder.OldestFirst;
-                limiter.QueueLimit = 0;
-            });
+            options.AddPolicy("api", httpContext =>
+                RateLimitPartition.GetFixedWindowLimiter(
+                    partitionKey: GetPartitionKey(httpContext),
+                    factory: _ => new FixedWindowRateLimiterOptions
+                    {
+                        PermitLimit = 60,
+                        Window = TimeSpan.FromMinutes(1),
+                        QueueProcessingOrder = QueueProcessingOrder.OldestFirst,
+                        QueueLimit = 0,
+                    }));
 
             options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
         });
 
         return services;
+    }
+
+    /// <summary>
+    /// 決定 rate limiter 的 partition key。已登入使用者以 <c>NameIdentifier</c> 分桶（防止單一帳號輪替 IP 繞過限額），
+    /// 否則退回 remote IP；若兩者皆無（測試或極端環境）則以固定字串彙總，避免因 null key 造成整站共桶。
+    /// </summary>
+    private static string GetPartitionKey(HttpContext httpContext)
+    {
+        var userId = httpContext.User?.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+        if (!string.IsNullOrEmpty(userId))
+        {
+            return $"user:{userId}";
+        }
+
+        var ip = httpContext.Connection.RemoteIpAddress?.ToString();
+        return !string.IsNullOrEmpty(ip) ? $"ip:{ip}" : "anonymous";
     }
 }
