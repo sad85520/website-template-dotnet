@@ -1,17 +1,25 @@
 <template>
-  <div class="fixed top-4 right-4 z-50 flex flex-col gap-2">
+  <div
+    class="fixed top-4 right-4 z-50 flex flex-col gap-2"
+    role="region"
+    aria-label="通知訊息區"
+    aria-live="polite"
+  >
     <TransitionGroup name="notification">
       <div
         v-for="notification in notificationStore.notifications"
         :key="notification.id"
+        :role="notification.type === 'error' ? 'alert' : 'status'"
         :class="['flex items-center gap-3 rounded-lg px-4 py-3 shadow-lg text-sm font-medium min-w-64', typeClasses[notification.type]]"
       >
         <span class="flex-1">{{ notification.message }}</span>
         <button
+          type="button"
           class="text-current opacity-70 hover:opacity-100"
+          aria-label="關閉通知"
           @click="notificationStore.dismiss(notification.id)"
         >
-          ✕
+          <span aria-hidden="true">✕</span>
         </button>
       </div>
     </TransitionGroup>

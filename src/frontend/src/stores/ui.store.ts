@@ -14,7 +14,11 @@ export const useUiStore = defineStore('ui', () => {
     theme.value = newTheme
     // Tailwind CSS 的 dark mode 透過 <html> 元素上的 'dark' class 控制，
     // 必須直接操作 DOM，因為 Tailwind 在編譯期決定 class，非執行期。
-    document.documentElement.classList.toggle('dark', newTheme === 'dark')
+    // SSR guard：若未來改用 SSR（Nuxt / vite-ssg）首次 render 於 Node 端，直接存
+    // document 會 ReferenceError。typeof 守門後 client hydrate 時會再觸發一次。
+    if (typeof document !== 'undefined') {
+      document.documentElement.classList.toggle('dark', newTheme === 'dark')
+    }
   }
 
   function setLoading(loading: boolean) {

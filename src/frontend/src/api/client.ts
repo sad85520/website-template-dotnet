@@ -45,7 +45,17 @@ apiClient.interceptors.request.use((config: InternalAxiosRequestConfig) => {
 apiClient.interceptors.response.use(
   (response) => response,
   async (error) => {
-    const originalRequest = error.config
+    // 標註成 InternalAxiosRequestConfig & { _retry?: boolean } 以合法掛 _retry 旗標。
+    const originalRequest = error.config as
+      | (InternalAxiosRequestConfig & { _retry?: boolean })
+      | undefined
+
+    // 純網路錯誤（ECONNREFUSED / timeout / CORS preflight 擋掉）時 error.config
+    // 會是 undefined；若直接存 `originalRequest._retry` 會拋
+    // TypeError: Cannot set properties of undefined。
+    if (!originalRequest) {
+      return Promise.reject(error)
+    }
 
     // _retry 旗標防止 refresh 請求本身若回傳 401 時觸發無限遞迴刷新。
     if (error.response?.status !== 401 || originalRequest._retry) {

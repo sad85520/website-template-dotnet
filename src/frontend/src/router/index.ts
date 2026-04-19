@@ -1,6 +1,15 @@
 import { createRouter, createWebHistory, type RouteRecordRaw } from 'vue-router'
 import { useAuthStore } from '@/stores'
 
+// Augment vue-router RouteMeta 以讓 `to.meta.requiresAuth` 等欄位擁有正確型別，
+// 避免下游開發以 `(to.meta as any).requiresAuth` 繞過檢查，並在 IDE 獲得 autocomplete。
+declare module 'vue-router' {
+  interface RouteMeta {
+    requiresAuth?: boolean
+    guestOnly?: boolean
+  }
+}
+
 const routes: RouteRecordRaw[] = [
   {
     path: '/',
