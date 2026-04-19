@@ -15,6 +15,16 @@ spec:
       labels:
         app: mssql
     spec:
+      # MSSQL 2022 official image 內部以 uid 10001（user "mssql"）啟動，
+      # fsGroup 10001 確保掛載的 PVC 擁有權會被 kubelet 自動改成 mssql 可寫。
+      # 不帶 fsGroup 容器會因無法寫 /var/opt/mssql 在首次啟動時 CrashLoopBackOff。
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 0
+        fsGroup: 10001
+        seccompProfile:
+          type: RuntimeDefault
       containers:
         - name: mssql
           image: mcr.microsoft.com/mssql/server:2022-latest
@@ -35,6 +45,13 @@ spec:
             limits:
               cpu: 1000m
               memory: 2Gi
+          # MSSQL image 在 /var/opt/mssql 寫入資料檔，無法 readOnlyRootFilesystem；
+          # 其餘能鎖的都鎖：不要求新權限、丟所有 Linux capabilities。
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
           volumeMounts:
             - name: mssql-data
               mountPath: /var/opt/mssql

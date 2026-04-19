@@ -23,13 +23,20 @@ cd website-template-dotnet
 cp .env.example .env
 # 編輯 .env，至少修改 DB_PASSWORD 和 JWT_SECRET
 
-# 3. 初始化前端 lockfile（首次，確保 CI --frozen-lockfile 可正常運行）
+# 3. 建立 appsettings.Development.json（已被 .gitignore 排除，避免誤將 secret 提交）
+cp src/backend/src/WebTemplate.Api/appsettings.Development.json.example \
+   src/backend/src/WebTemplate.Api/appsettings.Development.json
+# 編輯上述新檔，替換所有 __REPLACE_WITH_*__ 佔位符為本機值：
+#   Jwt:Secret              → openssl rand -base64 48
+#   ConnectionStrings:...   → 對應 .env 的 DB_PASSWORD
+
+# 4. 初始化前端 lockfile（首次，確保 CI --frozen-lockfile 可正常運行）
 cd src/frontend && pnpm install && cd ../..
 
-# 4. 啟動服務（首次較慢，需要 pull images）
+# 5. 啟動服務（首次較慢，需要 pull images）
 make dev-build
 
-# 5. 套用 DB Migration（另開終端）
+# 6. 套用 DB Migration（另開終端）
 make migrate
 ```
 

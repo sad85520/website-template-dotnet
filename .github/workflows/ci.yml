@@ -86,6 +86,23 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
+      # 防止範本佔位符 (__REPLACE_WITH_*__) 被誤提交為真實設定值。fail-fast 已在 runtime 擋下，
+      # 但 CI 層額外掃描可在 PR 階段就阻擋，避免部署流程跑到一半才報錯。
+      # Pattern 只配對「實際佔位值」（前後 __ 包住、全大寫），避免誤中：
+      #   - 引用型程式碼（如 ServiceCollectionExtensions 的 Contains("__REPLACE_WITH_") fail-fast）
+      #   - 說明文件裡描述佔位符格式的段落
+      # 排除 .example / docs / 本 workflow，讓樣板檔可以合法包含佔位值。
+      - name: Scan for unresolved __REPLACE_WITH_ placeholders
+        run: |
+          if git grep -nE "__REPLACE_WITH_[A-Z0-9_]+__" -- \
+              ':!*.example' \
+              ':!docs/**' \
+              ':!.github/workflows/ci.yml' \
+              ':!.env.example'; then
+            echo "::error::Unresolved __REPLACE_WITH_*__ placeholder found in tracked files."
+            exit 1
+          fi
+
   k8s-lint:
     name: K8S Manifest Lint
     runs-on: ubuntu-latest
