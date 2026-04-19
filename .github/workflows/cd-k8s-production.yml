@@ -1,8 +1,17 @@
-name: CD — Deploy Production
+name: CD (K8s) — Promote to Production
 
+# ====================================================================
+# K8s-only workflow. Only relevant if the project has opted into k8s
+# (see docs/scaling-to-k8s.md for the decision thresholds).
+#
+# 本 workflow 會把指定 image tag 套到 `infra/k8s/{backend,frontend}/deployment.yml`
+# 並 commit 到 main。Compose 部署的專案不需要本檔——Compose 側升版是在目標 VM 上
+# `docker compose pull && docker compose up -d`（見 docs/deployment.md）。
+# ====================================================================
+#
 # Production deployment is triggered manually after QA sign-off.
 # Trigger via GitHub Actions UI or CLI:
-#   gh workflow run cd-production.yml -f sha=<short-sha>
+#   gh workflow run cd-k8s-production.yml -f sha=<short-sha>
 #
 # If sha input is omitted, the latest image (tagged "latest") is used.
 
@@ -20,7 +29,7 @@ env:
 
 # 防止同時多次 prod promote 造成 git push 交錯。
 concurrency:
-  group: cd-production
+  group: cd-k8s-production
   cancel-in-progress: false
 
 jobs:

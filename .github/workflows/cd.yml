@@ -1,4 +1,8 @@
-name: CD — Build & Deploy Staging
+name: CD — Build & Push Images
+
+# 主線 CD：只負責把 image 推到 GHCR，不假設部署目標。
+# Compose 部署：VM 上執行 `docker compose pull && docker compose up -d`（見 docs/deployment.md）。
+# K8s 部署：另外啟用 `cd-k8s-staging.yml` / `cd-k8s-production.yml`（opt-in，見 docs/scaling-to-k8s.md）。
 
 on:
   workflow_run:
@@ -10,10 +14,9 @@ env:
   REGISTRY: ghcr.io
   IMAGE_PREFIX: ${{ github.repository }}
 
-# 防止同分支多次 staging deploy 交錯，導致 git push 互相覆蓋或製造無意義的 race。
-# `cancel-in-progress: false` 確保正在進行的 commit/push 不會被中斷成半提交狀態。
+# 防止同分支多次 build 交錯浪費 runner 時間（image tag 以 SHA 唯一化，不會互相覆蓋）。
 concurrency:
-  group: cd-staging-${{ github.ref }}
+  group: cd-build-${{ github.ref }}
   cancel-in-progress: false
 
 jobs:
@@ -76,71 +79,12 @@ jobs:
           tags: ${{ steps.meta-backend.outputs.tags }}
           labels: ${{ steps.meta-backend.outputs.labels }}
 
-  # 只負責「改 manifest 檔」的純讀取 job，產出 artifact 供下一個 write job 消費。
-  # 把 sed / 字串組裝這類較複雜的邏輯留在 contents:read 的 job，讓真正拿到
-  # contents:write 的 job 只跑最小限度的 git commit + push 指令，降低攻擊面。
-  prepare-staging-manifests:
-    name: Prepare Staging Manifests
-    runs-on: ubuntu-latest
-    needs: build-and-push
-    permissions:
-      contents: read
-
-    steps:
-      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
-        with:
-          persist-credentials: false
-
-      - name: Update image tags in staging K8S manifests
-        run: |
-          SHORT_SHA=$(echo "${{ github.sha }}" | cut -c1-7)
-          sed -i "s|image: ghcr.io/.*/frontend:.*|image: ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}/frontend:sha-${SHORT_SHA}|g" infra/k8s/frontend/deployment.yml
-          sed -i "s|image: ghcr.io/.*/backend:.*|image: ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}/backend:sha-${SHORT_SHA}|g" infra/k8s/backend/deployment.yml
-
-      - name: Upload updated manifests
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
-        with:
-          name: staging-manifests
-          path: infra/k8s/
-          retention-days: 1
-
-  # 只做 git commit + push，不做任何其他邏輯。即使未來 prepare job 被注入
-  # 惡意內容，此 job 也只是把 artifact 內容原樣 commit，沒有執行任意 shell 的空間。
-  # Branch protection 的設定要求：main 需允許 github-actions[bot] bypass
-  # （或另設 deploy key），否則此步驟會失敗——這是預期行為，強迫保護規則就位。
-  commit-staging-manifests:
-    name: Commit Staging Manifests
-    runs-on: ubuntu-latest
-    needs: prepare-staging-manifests
-    environment: staging
-    permissions:
-      contents: write
-
-    steps:
-      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Download updated manifests
-        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
-        with:
-          name: staging-manifests
-          path: infra/k8s/
-
-      - name: Commit & push
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add infra/k8s/
-          git diff --staged --quiet || git commit -m "chore: update staging k8s image tags to sha-$(echo '${{ github.sha }}' | cut -c1-7)"
-          git push
-
   # QA 標籤流程獨立成 job，只拿 pull-requests / issues 的 write 權限，
-  # 不碰 contents。label 流程失敗不影響 manifest 已 commit 的事實。
+  # 不碰 contents。label 流程失敗不影響 image 已 push 的事實。
   signal-qa:
     name: Signal QA — flip ready-for-ci to ready-for-qa
     runs-on: ubuntu-latest
-    needs: commit-staging-manifests
+    needs: build-and-push
     permissions:
       pull-requests: write
       issues: write
