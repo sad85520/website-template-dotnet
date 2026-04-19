@@ -13,6 +13,11 @@ spec:
       labels:
         app: backend
     spec:
+      # Pod-level seccomp: 以 RuntimeDefault profile 限制容器可呼叫的 syscall 集合，
+      # 明示設定避免跨叢集（k8s < 1.27 或停用 SeccompDefault 的 runtime）時預設行為不一致。
+      securityContext:
+        seccompProfile:
+          type: RuntimeDefault
       containers:
         - name: backend
           image: ghcr.io/sad85520/website-template-dotnet/backend:sha-ec8c2b5
@@ -23,9 +28,15 @@ spec:
             runAsUser: 1654
             runAsGroup: 1654
             allowPrivilegeEscalation: false
-            readOnlyRootFilesystem: false
+            # readOnly rootfs：RCE 發生時攻擊者無法在 image layer 之外落檔案持久化。
+            # ASP.NET Core runtime 仍需 /tmp 可寫（暫存、Data Protection fallback），
+            # 因此掛 emptyDir volume 補回可寫路徑。
+            readOnlyRootFilesystem: true
             capabilities:
               drop: [ALL]
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
           envFrom:
             - configMapRef:
                 name: app-config
@@ -59,3 +70,6 @@ spec:
               port: 8080
             initialDelaySeconds: 15
             periodSeconds: 10
+      volumes:
+        - name: tmp
+          emptyDir: {}

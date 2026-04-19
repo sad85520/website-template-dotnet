@@ -6,8 +6,21 @@ metadata:
   annotations:
     nginx.ingress.kubernetes.io/rewrite-target: /
     nginx.ingress.kubernetes.io/proxy-body-size: "10m"
+    # 強制將 HTTP 80 → HTTPS 443 redirect（301），避免使用者在明文連線留下 session cookie；
+    # 同時讓 nginx.conf 與後端發的 HSTS header 真正生效（RFC 6797 §8.1 瀏覽器忽略 HTTP 上的 HSTS）。
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/force-ssl-redirect: "true"
+    # cert-manager issuer：請依實際叢集環境換成對應名稱（如 letsencrypt-prod / ca-issuer）；
+    # 若叢集未裝 cert-manager，改手動建立 app-tls secret 後可刪除此 annotation。
+    cert-manager.io/cluster-issuer: letsencrypt-prod
 spec:
   ingressClassName: nginx
+  # TLS 憑證設定：hosts 與 secretName 下游需依實際域名客製。
+  # 沒設此段時 ingress-nginx 不會在 :443 listen，所有流量仍走明文，HSTS 無效。
+  tls:
+    - hosts:
+        - app.example.com
+      secretName: app-tls
   rules:
     - host: app.example.com  # 替換為你的域名
       http:

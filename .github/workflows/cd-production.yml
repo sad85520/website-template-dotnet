@@ -33,7 +33,7 @@ jobs:
       contents: read
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
         with:
           ref: main
           persist-credentials: false
@@ -54,7 +54,7 @@ jobs:
           sed -i "s|image: ghcr.io/.*/backend:.*|image: ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}/backend:${TAG}|g" infra/k8s/backend/deployment.yml
 
       - name: Upload updated manifests
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: production-manifests
           path: infra/k8s/
@@ -64,7 +64,7 @@ jobs:
         run: echo "${{ steps.tag.outputs.tag }}" > /tmp/tag.txt
 
       - name: Upload resolved tag
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: production-tag
           path: /tmp/tag.txt
@@ -81,19 +81,19 @@ jobs:
       contents: write
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           ref: main
 
       - name: Download updated manifests
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
           name: production-manifests
           path: infra/k8s/
 
       - name: Download resolved tag
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
           name: production-tag
           path: /tmp/

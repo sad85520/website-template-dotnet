@@ -13,6 +13,10 @@ spec:
       labels:
         app: frontend
     spec:
+      # Pod-level seccomp: 同 backend，明示 RuntimeDefault profile 保證跨叢集一致。
+      securityContext:
+        seccompProfile:
+          type: RuntimeDefault
       containers:
         - name: frontend
           image: ghcr.io/sad85520/website-template-dotnet/frontend:sha-ec8c2b5
@@ -22,9 +26,21 @@ spec:
             runAsNonRoot: true
             runAsUser: 101
             allowPrivilegeEscalation: false
-            readOnlyRootFilesystem: false
+            # readOnly rootfs：nginx runtime 需要 /var/cache/nginx（proxy cache）、
+            # /var/run（pid file）、/var/log/nginx（access/error log）、/tmp 可寫，
+            # 以 emptyDir 補回；image layer 以外無任何路徑可落檔案持久化。
+            readOnlyRootFilesystem: true
             capabilities:
               drop: [ALL]
+          volumeMounts:
+            - name: nginx-cache
+              mountPath: /var/cache/nginx
+            - name: nginx-run
+              mountPath: /var/run
+            - name: nginx-log
+              mountPath: /var/log/nginx
+            - name: tmp
+              mountPath: /tmp
           resources:
             requests:
               cpu: 50m
@@ -44,3 +60,12 @@ spec:
               port: 8080
             initialDelaySeconds: 5
             periodSeconds: 10
+      volumes:
+        - name: nginx-cache
+          emptyDir: {}
+        - name: nginx-run
+          emptyDir: {}
+        - name: nginx-log
+          emptyDir: {}
+        - name: tmp
+          emptyDir: {}
