@@ -19,7 +19,7 @@ spec:
           type: RuntimeDefault
       containers:
         - name: frontend
-          image: ghcr.io/sad85520/website-template-dotnet/frontend:sha-7bfc29f
+          image: ghcr.io/sad85520/website-template-dotnet/frontend:sha-3dc8379
           ports:
             - containerPort: 8080
           securityContext:
