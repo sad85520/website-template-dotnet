@@ -17,18 +17,13 @@ public class UserService(IUserRepository userRepository) : IUserService
     }
 
     /// <inheritdoc/>
-    public async Task<ApiResponse<IEnumerable<UserDto>>> GetAllAsync(
+    public async Task<PagedResult<UserDto>> GetAllAsync(
         int page, int limit, string? search, CancellationToken ct = default)
     {
         var (total, items) = await userRepository.FindPagedAsync(page, limit, search, ct);
 
-        var users = items.Select(u => u.ToDto());
+        var users = items.Select(u => u.ToDto()).ToList();
 
-        return ApiResponse<IEnumerable<UserDto>>.Paginated(users, new PaginationMeta
-        {
-            Total = total,
-            Page = page,
-            Limit = limit,
-        });
+        return new PagedResult<UserDto>(users, total, page, limit);
     }
 }

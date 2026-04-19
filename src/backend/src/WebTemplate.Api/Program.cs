@@ -1,7 +1,9 @@
+using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using NetEscapades.AspNetCore.SecurityHeaders;
 using Scalar.AspNetCore;
 using Serilog;
+using WebTemplate.Api.Common.Models;
 using WebTemplate.Api.Infrastructure.Data;
 using WebTemplate.Api.Infrastructure.Extensions;
 using WebTemplate.Api.Infrastructure.Middleware;
@@ -26,6 +28,27 @@ try
     builder.Services.AddControllers();
     builder.Services.Configure<RouteOptions>(o => o.LowercaseUrls = true);
     builder.Services.AddEndpointsApiExplorer();
+
+    // Model validation 失敗時統一回傳 ApiResponse<object> 信封，而非 ASP.NET Core 預設的
+    // ValidationProblemDetails（RFC 7807）。避免前端同時面對兩種錯誤格式（成功路徑的
+    // ApiResponse + 驗證路徑的 ProblemDetails），統一的錯誤殼讓客戶端錯誤處理邏輯只需一份。
+    builder.Services.Configure<ApiBehaviorOptions>(options =>
+    {
+        options.InvalidModelStateResponseFactory = context =>
+        {
+            var errors = context.ModelState
+                .Where(kvp => kvp.Value?.Errors.Count > 0)
+                .SelectMany(kvp => kvp.Value!.Errors.Select(err => new FieldError
+                {
+                    Field = kvp.Key,
+                    Message = err.ErrorMessage,
+                }))
+                .ToList();
+
+            return new BadRequestObjectResult(
+                ApiResponse<object>.Fail("Validation failed.", errors));
+        };
+    });
 
     // AddProblemDetails 必須與 AddExceptionHandler 搭配，
     // 才能在 handler 未攔截到例外時回退為標準 RFC 7807 Problem Details 格式。

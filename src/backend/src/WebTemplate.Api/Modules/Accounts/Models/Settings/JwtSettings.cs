@@ -23,4 +23,12 @@ public class JwtSettings
     // 否則 cookie 和 token 的有效期會不同步。
     /// <summary>Refresh Token 有效期（天數），預設 7 天；須與 <see cref="Controllers.AuthController"/> 的 cookie MaxAge 保持一致。</summary>
     public int RefreshTokenExpirationDays { get; set; } = 7;
+
+    /// <summary>
+    /// Refresh cookie 的 Domain 屬性（選填）。預留給 production 子網域共用 session 的情境：
+    /// 若前端在 <c>www.example.com</c>、API 在 <c>api.example.com</c>，必須設為 <c>.example.com</c>
+    /// 才能跨子網域讀寫同一個 refresh cookie。留空（預設）則由瀏覽器將 cookie 綁在發行主機上，
+    /// 較嚴格但無法跨子網域分享。
+    /// </summary>
+    public string? RefreshCookieDomain { get; set; }
 }

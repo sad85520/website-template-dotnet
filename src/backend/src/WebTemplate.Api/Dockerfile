@@ -30,6 +30,7 @@ ENV ASPNETCORE_URLS=http://+:8080
 # Docker HEALTHCHECK intentionally omitted: the aspnet runtime image does not
 # ship curl/wget, and pulling one in just for a healthcheck bloats the image.
 # k8s livenessProbe/readinessProbe (see infra/k8s/backend/deployment.yml) hit
-# /health and /health/ready directly via HTTP and are the source of truth.
+# /api/health and /api/health/ready directly via HTTP and are the source of truth.
+# Route prefix must stay in sync with HealthController's [Route("api/health")].
 
 ENTRYPOINT ["dotnet", "WebTemplate.Api.dll"]

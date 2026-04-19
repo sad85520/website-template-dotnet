@@ -1,23 +1,23 @@
 namespace WebTemplate.Api.Common.Models;
 
-/// <summary>統一 API 回應包裝器。</summary>
+/// <summary>統一 API 回應包裝器。以 <c>sealed record</c> + <c>init</c> 設計避免呼叫端回傳後意外改寫欄位。</summary>
 /// <typeparam name="T">資料酬載的型別。</typeparam>
-public class ApiResponse<T>
+public sealed record ApiResponse<T>
 {
     /// <summary>請求是否成功。</summary>
-    public bool Success { get; set; }
+    public required bool Success { get; init; }
 
     /// <summary>回應資料；失敗時為 <c>null</c>。</summary>
-    public T? Data { get; set; }
+    public T? Data { get; init; }
 
     /// <summary>錯誤或提示訊息；成功時通常為 <c>null</c>。</summary>
-    public string? Message { get; set; }
+    public string? Message { get; init; }
 
     /// <summary>欄位層級驗證錯誤清單；僅驗證失敗時填入。</summary>
-    public IEnumerable<FieldError>? Errors { get; set; }
+    public IEnumerable<FieldError>? Errors { get; init; }
 
     /// <summary>分頁中繼資料；僅分頁查詢回應時填入。</summary>
-    public PaginationMeta? Meta { get; set; }
+    public PaginationMeta? Meta { get; init; }
 
     /// <summary>建立代表查詢成功的回應。</summary>
     /// <param name="data">要回傳的資料。</param>
@@ -42,28 +42,40 @@ public class ApiResponse<T>
         new() { Success = true, Data = data, Meta = meta };
 }
 
+/// <summary>
+/// 非泛型 <see cref="ApiResponse{T}"/> 的無資料成功回應工廠，避免呼叫端使用
+/// <c>ApiResponse&lt;object&gt;.Ok(null!)</c> 這種 null-forgiving 黑魔法產生無資料回應。
+/// </summary>
+public static class ApiResponse
+{
+    /// <summary>建立不帶資料的成功回應（例如登出、刪除等不需回傳 payload 的操作）。</summary>
+    /// <returns>Data = <c>null</c> 的成功 <see cref="ApiResponse{T}"/>。</returns>
+    public static ApiResponse<object?> Ok() =>
+        new() { Success = true };
+}
+
 /// <summary>單一欄位的驗證錯誤。</summary>
-public class FieldError
+public sealed record FieldError
 {
     /// <summary>發生錯誤的欄位名稱。</summary>
-    public string Field { get; set; } = string.Empty;
+    public required string Field { get; init; }
 
     /// <summary>欄位的錯誤訊息。</summary>
-    public string Message { get; set; } = string.Empty;
+    public required string Message { get; init; }
 }
 
 /// <summary>分頁查詢的中繼資料。</summary>
-public class PaginationMeta
+public sealed record PaginationMeta
 {
     /// <summary>符合條件的資料總筆數（不含分頁限制）。</summary>
-    public int Total { get; set; }
+    public required int Total { get; init; }
 
     /// <summary>目前頁碼（從 1 開始）。</summary>
-    public int Page { get; set; }
+    public required int Page { get; init; }
 
     /// <summary>每頁筆數。</summary>
-    public int Limit { get; set; }
+    public required int Limit { get; init; }
 
     /// <summary>總頁數，由 <see cref="Total"/> 和 <see cref="Limit"/> 計算而得。</summary>
-    public int TotalPages => (int)Math.Ceiling((double)Total / Limit);
+    public int TotalPages => Limit > 0 ? (int)Math.Ceiling((double)Total / Limit) : 0;
 }

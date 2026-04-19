@@ -38,7 +38,11 @@ public interface IUserRepository
     /// <returns>已儲存的 <see cref="User"/> 實體。</returns>
     Task<User> CreateAsync(User user, CancellationToken ct = default);
 
-    /// <summary>將目前 EF Core 變更追蹤的所有修改持久化至資料庫。</summary>
+    /// <summary>
+    /// 將已追蹤的使用者實體變更（例如 <c>FailedLoginAttempts</c>、<c>LockoutUntil</c>）持久化至資料庫。
+    /// 讓服務層以語意明確的方法名稱更新使用者狀態，避免直接暴露 EF Core 的 Unit-of-Work（<c>SaveChangesAsync</c>）。
+    /// </summary>
+    /// <param name="user">要更新的使用者實體（需先由查詢方法取得以便 EF 追蹤）。</param>
     /// <param name="ct">取消令牌。</param>
-    Task SaveChangesAsync(CancellationToken ct = default);
+    Task UpdateAsync(User user, CancellationToken ct = default);
 }

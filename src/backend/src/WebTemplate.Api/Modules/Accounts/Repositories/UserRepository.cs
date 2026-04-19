@@ -54,6 +54,12 @@ public class UserRepository(AppDbContext db) : IUserRepository
     }
 
     /// <inheritdoc/>
-    public Task SaveChangesAsync(CancellationToken ct = default)
-        => db.SaveChangesAsync(ct);
+    public async Task UpdateAsync(User user, CancellationToken ct = default)
+    {
+        // user 若為查詢方法回傳的已追蹤實體，EF Core 會偵測欄位變更並產生 UPDATE。
+        // 若是 detached 實體（例如測試中手動 new 後改欄位），需確保呼叫端先 Attach 或直接設定 State。
+        // 此處刻意不呼叫 db.Users.Update(user) 以避免全欄位更新覆蓋資料庫當前值。
+        _ = user;
+        await db.SaveChangesAsync(ct);
+    }
 }

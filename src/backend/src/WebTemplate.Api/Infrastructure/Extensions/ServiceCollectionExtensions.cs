@@ -1,8 +1,10 @@
 using System.Text;
 using System.Threading.RateLimiting;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.IdentityModel.JsonWebTokens;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi;
 using Microsoft.AspNetCore.OpenApi;
@@ -34,6 +36,14 @@ public static class ServiceCollectionExtensions
             throw new InvalidOperationException(
                 "Database connection string is not configured. Set 'ConnectionStrings:DefaultConnection' in configuration.");
 
+        // 防呆：若仍保留 template 佔位符（如 `__REPLACE_WITH_<field>__` 形式的範本值），
+        // 雖然字串非空會通過上一個檢查，但實際連線一定會失敗，且錯誤訊息隱晦（timeout 或 login failed）。
+        // 主動 fail-fast 並指出未替換的欄位，省去下游 clone 使用者除錯時間。
+        if (connectionString.Contains("__REPLACE_WITH_", StringComparison.Ordinal))
+            throw new InvalidOperationException(
+                "Database connection string still contains '__REPLACE_WITH_' placeholder. " +
+                "Replace it with a real value in appsettings.Development.json or the Jwt/ConnectionStrings env vars.");
+
         services.AddDbContext<AppDbContext>(options =>
             options.UseSqlServer(connectionString));
 
@@ -55,11 +65,27 @@ public static class ServiceCollectionExtensions
         if (string.IsNullOrWhiteSpace(jwtSettings.Secret))
             throw new InvalidOperationException("JWT secret key is not configured. Set 'Jwt:Secret' in configuration.");
 
+        // 同 ConnectionString 的防呆：擋住未替換佔位符直接跑起來的情境，避免
+        // 所有 token 都以 template 的固定字串簽名造成 prod 使用者帳號被共用密鑰破解。
+        if (jwtSettings.Secret.Contains("__REPLACE_WITH_", StringComparison.Ordinal))
+            throw new InvalidOperationException(
+                "JWT secret still contains '__REPLACE_WITH_' placeholder. " +
+                "Replace it with a real secret (recommend `openssl rand -base64 48`) in configuration.");
+
         services.Configure<JwtSettings>(config.GetSection("Jwt"));
+
+        // 全域關閉 inbound claim 名稱對應，避免 JWT 標準短名稱（sub/email/role）被靜態地
+        // 重新寫成 .NET 的 ClaimTypes URI 長字串，造成 TokenService 發行與 middleware 驗證
+        // 兩側對同一 claim 名稱不一致、需要多處同步修正。必須設在 handler 被建立之前。
+        JsonWebTokenHandler.DefaultMapInboundClaims = false;
 
         services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
             .AddJwtBearer(options =>
             {
+                // MapInboundClaims = false 與上面的 DefaultMapInboundClaims 呼應，
+                // 確保此 scheme 不會再把 sub/email 對應回 ClaimTypes。
+                options.MapInboundClaims = false;
+
                 options.TokenValidationParameters = new TokenValidationParameters
                 {
                     ValidateIssuer = true,
@@ -70,11 +96,25 @@ public static class ServiceCollectionExtensions
                     ValidAudience = jwtSettings.Audience,
                     IssuerSigningKey = new SymmetricSecurityKey(
                         Encoding.UTF8.GetBytes(jwtSettings.Secret)),
+                    // 指定 ClaimsPrincipal 判讀 name / role 所用的 claim 型別，
+                    // 讓 [Authorize(Roles = "Admin")] 以 "role" 短名稱而非 ClaimTypes.Role 長 URI 運作。
+                    NameClaimType = JwtRegisteredClaimNames.Name,
+                    RoleClaimType = "role",
                     // 預設 ClockSkew 為 5 分鐘，會讓已過期的 token 仍可使用，
                     // 設為 Zero 以嚴格遵守 AccessTokenExpirationMinutes 設定。
                     ClockSkew = TimeSpan.Zero,
                 };
             });
+
+        // 以「預設拒絕」為全域授權策略：所有端點預設需要已驗證使用者，
+        // 忘記標註 [Authorize] 的新 controller / action 會自動被保護。
+        // 真正需要匿名的端點（register、login、refresh、health）必須明確宣告 [AllowAnonymous]。
+        services.AddAuthorization(options =>
+        {
+            options.FallbackPolicy = new AuthorizationPolicyBuilder()
+                .RequireAuthenticatedUser()
+                .Build();
+        });
 
         return services;
     }
@@ -189,7 +229,9 @@ public static class ServiceCollectionExtensions
     /// </summary>
     private static string GetPartitionKey(HttpContext httpContext)
     {
-        var userId = httpContext.User?.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+        // 以 JWT 標準 "sub" 短名稱取 user id，對齊 MapInboundClaims = false 的設定；
+        // 原本的 ClaimTypes.NameIdentifier 只有在啟用 inbound 映射時才存在。
+        var userId = httpContext.User?.FindFirst(JwtRegisteredClaimNames.Sub)?.Value;
         if (!string.IsNullOrEmpty(userId))
         {
             return $"user:{userId}";

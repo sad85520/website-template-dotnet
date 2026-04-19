@@ -1,8 +1,8 @@
-using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
 using System.Security.Cryptography;
 using System.Text;
 using Microsoft.Extensions.Options;
+using Microsoft.IdentityModel.JsonWebTokens;
 using Microsoft.IdentityModel.Tokens;
 using WebTemplate.Api.Modules.Accounts.Models.Entities;
 using WebTemplate.Api.Modules.Accounts.Models.Settings;
@@ -16,29 +16,40 @@ public class TokenService(IRefreshTokenRepository refreshTokenRepository, IOptio
 {
     private readonly JwtSettings _jwt = jwtOptions.Value;
 
+    // 改用新版 JsonWebTokenHandler（Microsoft.IdentityModel.JsonWebTokens），
+    // 原因：
+    // 1. 效能優於舊版 JwtSecurityTokenHandler（避免 XML 派生類別的序列化開銷）。
+    // 2. 預設 API 行為較單純，不會隱式把 RFC 7519 標準短名稱（sub/email/role）
+    //    映射成 .NET 的 ClaimTypes URI 長字串，避免驗證端需同時處理兩套名稱。
+    // 驗證端另設定 MapInboundClaims = false + NameClaimType/RoleClaimType 字串，
+    // 讓兩側統一使用 JWT 標準短名稱（sub、name、role）。
+    private static readonly JsonWebTokenHandler Handler = new();
+
     /// <inheritdoc/>
     public string GenerateAccessToken(User user)
     {
         var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(_jwt.Secret));
         var credentials = new SigningCredentials(key, SecurityAlgorithms.HmacSha256);
 
-        var claims = new[]
+        // 使用 JWT 標準短名稱而非 ClaimTypes URI，與 MapInboundClaims=false 驗證設定對齊。
+        // Role 以小寫字串 "role" 寫入，避免 JsonWebTokenHandler 把 ClaimTypes.Role 的長 URI
+        // 原樣寫進 token 讓 payload 過度膨脹。
+        var descriptor = new SecurityTokenDescriptor
         {
-            new Claim(ClaimTypes.NameIdentifier, user.Id.ToString()),
-            new Claim(ClaimTypes.Email, user.Email),
-            new Claim(ClaimTypes.Name, user.DisplayName),
-            new Claim(ClaimTypes.Role, user.Role.ToString()),
+            Issuer = _jwt.Issuer,
+            Audience = _jwt.Audience,
+            Expires = DateTime.UtcNow.AddMinutes(_jwt.AccessTokenExpirationMinutes),
+            SigningCredentials = credentials,
+            Subject = new ClaimsIdentity(new[]
+            {
+                new Claim(JwtRegisteredClaimNames.Sub, user.Id.ToString()),
+                new Claim(JwtRegisteredClaimNames.Email, user.Email),
+                new Claim(JwtRegisteredClaimNames.Name, user.DisplayName),
+                new Claim("role", user.Role.ToString()),
+            }),
         };
 
-        var token = new JwtSecurityToken(
-            issuer: _jwt.Issuer,
-            audience: _jwt.Audience,
-            claims: claims,
-            expires: DateTime.UtcNow.AddMinutes(_jwt.AccessTokenExpirationMinutes),
-            signingCredentials: credentials
-        );
-
-        return new JwtSecurityTokenHandler().WriteToken(token);
+        return Handler.CreateToken(descriptor);
     }
 
     // 使用密碼學安全的亂數產生器（CSPRNG）而非 Random，
@@ -58,7 +69,7 @@ public class TokenService(IRefreshTokenRepository refreshTokenRepository, IOptio
     }
 
     /// <inheritdoc/>
-    public async Task<RefreshToken> CreateRefreshTokenAsync(Guid userId, CancellationToken ct = default)
+    public async Task<RefreshTokenPair> CreateRefreshTokenAsync(Guid userId, CancellationToken ct = default)
     {
         var rawToken = GenerateRefreshToken();
         var refreshToken = new RefreshToken
@@ -70,13 +81,11 @@ public class TokenService(IRefreshTokenRepository refreshTokenRepository, IOptio
 
         await refreshTokenRepository.CreateAsync(refreshToken, ct);
 
-        // 儲存完成後，將 EF Core 追蹤的實體 detach，
-        // 再把 TokenHash 欄位替換為明文 rawToken 後回傳。
-        // 這樣做的目的是讓呼叫端（AuthService）能取得明文傳給客戶端，
-        // 同時確保資料庫中的記錄維持 hash 狀態不被 EF 意外更新。
-        refreshTokenRepository.Detach(refreshToken);
-        refreshToken.TokenHash = rawToken;
-        return refreshToken;
+        // 原實作 detach + 改寫 TokenHash 欄位回傳明文，讓同一個欄位同時代表
+        // 「資料庫裡的雜湊」與「回給 caller 的明文」，非常容易誤用
+        // （日誌、mapper、後續 re-attach 都可能把明文誤落回資料庫）。
+        // 改用 RefreshTokenPair record 清楚切兩個欄位：entity 維持 hash，RawToken 對外。
+        return new RefreshTokenPair(refreshToken, rawToken);
     }
 
     /// <inheritdoc/>

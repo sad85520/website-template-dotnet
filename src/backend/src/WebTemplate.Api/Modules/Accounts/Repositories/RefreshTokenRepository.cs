@@ -46,9 +46,4 @@ public class RefreshTokenRepository(AppDbContext db) : IRefreshTokenRepository
         await db.SaveChangesAsync(ct);
     }
 
-    // 將實體從 EF Core 的變更追蹤中移除，讓 TokenService 得以安全地在記憶體中
-    // 修改 TokenHash 欄位（替換為明文），而不觸發後續的資料庫更新。
-    /// <inheritdoc/>
-    public void Detach(RefreshToken token)
-        => db.Entry(token).State = EntityState.Detached;
 }

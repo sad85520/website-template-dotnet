@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Diagnostics.HealthChecks;
 
@@ -6,6 +7,9 @@ namespace WebTemplate.Api.Controllers;
 /// <summary>應用程式健康檢查端點，供 Kubernetes Liveness 與 Readiness Probe 使用。</summary>
 [ApiController]
 [Route("api/health")]
+// Health probes 由 Kubelet 匿名呼叫，必須顯式 AllowAnonymous 以繞過全域 FallbackPolicy；
+// 否則會回 401 讓 pod 被誤判為不健康。
+[AllowAnonymous]
 public class HealthController(HealthCheckService healthCheckService) : ControllerBase
 {
     // Liveness：只確認程序本身是否存活，不檢查任何依賴項，

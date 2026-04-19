@@ -20,6 +20,18 @@ public sealed class GlobalExceptionHandler(ILogger<GlobalExceptionHandler> logge
         logger.LogError(exception, "Unhandled exception for {Method} {Path}",
             httpContext.Request.Method, httpContext.Request.Path);
 
+        // 若 response 已開始寫出（大檔案下載、IAsyncEnumerable streaming、SSE），
+        // 再對 StatusCode / headers 賦值會拋 InvalidOperationException，覆蓋原始例外
+        // 讓 log 無法追蹤根因，且 client 會拿到斷頭 body。直接 return false 交回
+        // 給 ASP.NET 內建的 default handler 記錄後結束連線。
+        if (httpContext.Response.HasStarted)
+        {
+            logger.LogWarning(
+                "Response has already started for {Method} {Path}; cannot write error body",
+                httpContext.Request.Method, httpContext.Request.Path);
+            return false;
+        }
+
         var (statusCode, message) = exception switch
         {
             // 白名單：僅業務層明確拋出、訊息經過審核的 AppException 可原樣對外揭露。

@@ -23,6 +23,11 @@
     <PackageReference Include="Scalar.AspNetCore" Version="2.5.0" />
     <PackageReference Include="Serilog.AspNetCore" Version="9.0.0" />
     <PackageReference Include="Serilog.Sinks.Console" Version="6.0.0" />
+    <!-- CompactJsonFormatter：供 appsettings.Production.json 以 "formatter":
+         "Serilog.Formatting.Compact.CompactJsonFormatter, Serilog.Formatting.Compact"
+         指定輸出 CLEF（Compact Log Event Format），讓 Loki / CloudWatch / Stackdriver
+         等 log aggregator 能直接 ingest JSON，而不是人類可讀的文字行。 -->
+    <PackageReference Include="Serilog.Formatting.Compact" Version="3.0.0" />
     <PackageReference Include="Microsoft.Extensions.Diagnostics.HealthChecks.EntityFrameworkCore" Version="10.0.0" />
   </ItemGroup>
 

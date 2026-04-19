@@ -27,8 +27,4 @@ public interface IRefreshTokenRepository
     /// <param name="userId">目標使用者的 ID。</param>
     /// <param name="ct">取消令牌。</param>
     Task RevokeAllForUserAsync(Guid userId, CancellationToken ct = default);
-
-    /// <summary>將指定 Token 從 EF Core 變更追蹤器中分離，避免後續操作產生意外的狀態污染。</summary>
-    /// <param name="token">要分離的 Token 實體。</param>
-    void Detach(RefreshToken token);
 }
