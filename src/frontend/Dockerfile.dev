@@ -6,7 +6,7 @@
 #     覆寫到容器內已裝好的依賴。
 #   - 跑 Vite dev server (port 5173)，不走 nginx。
 # 如需 prod image（多階段 build + nginx.spa.conf），請用 src/frontend/Dockerfile。
-FROM node:22-alpine
+FROM node:24-alpine
 
 WORKDIR /app
 
