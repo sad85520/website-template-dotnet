@@ -1,6 +1,29 @@
-import axios, { type AxiosInstance, type InternalAxiosRequestConfig } from 'axios'
+import axios, {
+  type AxiosInstance,
+  type AxiosResponseHeaders,
+  type InternalAxiosRequestConfig,
+  type RawAxiosResponseHeaders,
+} from 'axios'
 import { useAuthStore } from '@/stores/auth.store'
-import type { ApiResponse, LoginResponse } from '@/types'
+import type { LoginResponse, PaginationMeta } from '@/types'
+
+// 分頁列表端點（見 ADR-004）把分頁中繼資料放在回應標頭而非信封 body，
+// 這裡集中解析成 PaginationMeta，避免每個呼叫端各自重複解析標頭字串轉數字的邏輯。
+export function parsePaginationHeaders(
+  headers: RawAxiosResponseHeaders | AxiosResponseHeaders,
+): PaginationMeta {
+  const toNumber = (value: unknown): number => {
+    const n = Number(Array.isArray(value) ? value[0] : value)
+    return Number.isFinite(n) ? n : 0
+  }
+
+  return {
+    total: toNumber(headers['x-pagination-total']),
+    page: toNumber(headers['x-pagination-page']),
+    limit: toNumber(headers['x-pagination-limit']),
+    totalPages: toNumber(headers['x-pagination-total-pages']),
+  }
+}
 
 // isRefreshing 防止多個 401 錯誤同時觸發多次 refresh 請求（並發競態問題）。
 // 第一個 401 開始 refresh，後續的 401 請求進入 refreshQueue 等待新 token。
@@ -78,13 +101,14 @@ apiClient.interceptors.response.use(
       // 直接使用 axios 而非 apiClient 發送 refresh 請求，
       // 避免 apiClient 的 response interceptor 再次攔截此請求的 401，
       // 造成無限遞迴。withCredentials 確保 httpOnly cookie 被帶入。
-      const response = await axios.post<ApiResponse<LoginResponse>>(
+      // 成功回應不再有信封，主體直接是 LoginResponse。
+      const response = await axios.post<LoginResponse>(
         `${import.meta.env.VITE_API_BASE_URL}/v1/auth/refresh`,
         {},
         { withCredentials: true }
       )
 
-      const newToken = response.data.data?.accessToken
+      const newToken = response.data?.accessToken
       if (!newToken) {
         // refresh 回 200 但沒有 token — 後端契約異常。不要以空字串帶入 Authorization
         // 而讓請求繼續重試（會導致無限 401 迴圈），改為 throw 交給下方 catch 清 auth state。

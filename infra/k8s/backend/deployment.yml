@@ -20,7 +20,7 @@ spec:
           type: RuntimeDefault
       containers:
         - name: backend
-          image: ghcr.io/sad85520/website-template-dotnet/backend:sha-3dc8379
+          image: ghcr.io/your-org/website-template-dotnet/backend:sha-abc1234
           ports:
             - containerPort: 8080
           securityContext:

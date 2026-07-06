@@ -1,20 +1,21 @@
 using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
-using Microsoft.Extensions.DependencyInjection;
-using WebTemplate.Api.Common.Models;
-using WebTemplate.Api.Infrastructure.Data;
+using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Mvc;
 using WebTemplate.Api.Modules.Accounts.Models.DTOs;
 
 namespace WebTemplate.Api.Tests.Integration;
 
 /// <summary>
 /// <see cref="WebTemplate.Api.Modules.Accounts.Controllers.AuthController"/> 端到端整合測試。
-/// 透過 <see cref="CustomWebApplicationFactory"/> 啟動完整 middleware pipeline（含認證、授權、
-/// 例外處理、ApiResponse 信封序列化、refresh token cookie 行為），
-/// 驗證 HTTP 層的契約而非僅 Service 層邏輯。
+/// 透過 <see cref="CustomWebApplicationFactory"/>（背後為 Testcontainers 啟動的真實 SQL Server）
+/// 啟動完整 middleware pipeline（含認證、授權、例外處理、RFC 7807 ProblemDetails 序列化、
+/// refresh token cookie 行為），驗證 HTTP 層的契約而非僅 Service 層邏輯。
 /// </summary>
-public class AuthControllerIntegrationTests : IClassFixture<CustomWebApplicationFactory>
+[Collection(IntegrationTestCollection.Name)]
+[Trait("Category", "Integration")]
+public class AuthControllerIntegrationTests : IAsyncLifetime
 {
     private readonly CustomWebApplicationFactory _factory;
     private static readonly JsonSerializerOptions JsonOpts = new(JsonSerializerDefaults.Web);
@@ -24,11 +25,16 @@ public class AuthControllerIntegrationTests : IClassFixture<CustomWebApplication
         _factory = factory;
     }
 
+    /// <summary>每個測試方法執行前，透過 Respawn 清空資料表，確保測試之間互不污染。</summary>
+    public Task InitializeAsync() => _factory.ResetDatabaseAsync();
+
+    public Task DisposeAsync() => Task.CompletedTask;
+
     // ──────────────────────────────────────────────────────────
     // POST /api/v1/auth/register
     // ──────────────────────────────────────────────────────────
 
-    /// <summary>註冊成功時應回傳 201 Created 與包含 UserDto 的 ApiResponse。</summary>
+    /// <summary>註冊成功時應回傳 201 Created，主體直接是 UserDto（不含信封）。</summary>
     [Fact]
     public async Task Register_ReturnsCreated_WhenValidRequest()
     {
@@ -44,15 +50,13 @@ public class AuthControllerIntegrationTests : IClassFixture<CustomWebApplication
 
         Assert.Equal(HttpStatusCode.Created, response.StatusCode);
 
-        var body = await response.Content.ReadFromJsonAsync<ApiResponse<UserDto>>(JsonOpts);
+        var body = await response.Content.ReadFromJsonAsync<UserDto>(JsonOpts);
         Assert.NotNull(body);
-        Assert.True(body!.Success);
-        Assert.NotNull(body.Data);
-        Assert.Equal(request.Email, body.Data!.Email);
-        Assert.Equal(request.DisplayName, body.Data.DisplayName);
+        Assert.Equal(request.Email, body!.Email);
+        Assert.Equal(request.DisplayName, body.DisplayName);
     }
 
-    /// <summary>密碼過短應觸發 DataAnnotations 驗證並回傳 400。</summary>
+    /// <summary>密碼過短應觸發 DataAnnotations 驗證並回傳框架原生的 400 ValidationProblemDetails。</summary>
     [Fact]
     public async Task Register_ReturnsBadRequest_WhenPasswordTooShort()
     {
@@ -67,9 +71,14 @@ public class AuthControllerIntegrationTests : IClassFixture<CustomWebApplication
         var response = await client.PostAsJsonAsync("/api/v1/auth/register", request);
 
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        Assert.Equal("application/problem+json", response.Content.Headers.ContentType?.MediaType);
+
+        var problem = await response.Content.ReadFromJsonAsync<ValidationProblemDetails>(JsonOpts);
+        Assert.NotNull(problem);
+        Assert.Contains(problem!.Errors, kvp => kvp.Key == nameof(RegisterRequest.Password));
     }
 
-    /// <summary>重複註冊同一 Email 應由 GlobalExceptionHandler 轉譯為 409 Conflict。</summary>
+    /// <summary>重複註冊同一 Email 應由 GlobalExceptionHandler 轉譯為 409 ProblemDetails。</summary>
     [Fact]
     public async Task Register_ReturnsConflict_WhenEmailAlreadyExists()
     {
@@ -87,13 +96,19 @@ public class AuthControllerIntegrationTests : IClassFixture<CustomWebApplication
 
         var second = await client.PostAsJsonAsync("/api/v1/auth/register", request);
         Assert.Equal(HttpStatusCode.Conflict, second.StatusCode);
+        Assert.Equal("application/problem+json", second.Content.Headers.ContentType?.MediaType);
+
+        var problem = await second.Content.ReadFromJsonAsync<ProblemDetails>(JsonOpts);
+        Assert.NotNull(problem);
+        Assert.Equal(StatusCodes.Status409Conflict, problem!.Status);
+        Assert.Equal("Email is already registered.", problem.Detail);
     }
 
     // ──────────────────────────────────────────────────────────
     // POST /api/v1/auth/login
     // ──────────────────────────────────────────────────────────
 
-    /// <summary>成功登入應回傳 200、access token、以及 HttpOnly 的 refreshToken cookie。</summary>
+    /// <summary>成功登入應回傳 200、access token（直接為主體，不含信封）、以及 HttpOnly 的 refreshToken cookie。</summary>
     [Fact]
     public async Task Login_ReturnsAccessTokenAndCookie_WhenCredentialsValid()
     {
@@ -107,12 +122,10 @@ public class AuthControllerIntegrationTests : IClassFixture<CustomWebApplication
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
 
-        var body = await response.Content.ReadFromJsonAsync<ApiResponse<LoginResponse>>(JsonOpts);
+        var body = await response.Content.ReadFromJsonAsync<LoginResponse>(JsonOpts);
         Assert.NotNull(body);
-        Assert.True(body!.Success);
-        Assert.NotNull(body.Data);
-        Assert.False(string.IsNullOrWhiteSpace(body.Data!.AccessToken));
-        Assert.Equal(15 * 60, body.Data.ExpiresIn);
+        Assert.False(string.IsNullOrWhiteSpace(body!.AccessToken));
+        Assert.Equal(15 * 60, body.ExpiresIn);
 
         // 驗證 refreshToken cookie 具備安全屬性：HttpOnly、Secure、SameSite=Strict
         Assert.True(response.Headers.TryGetValues("Set-Cookie", out var cookies));
@@ -123,7 +136,7 @@ public class AuthControllerIntegrationTests : IClassFixture<CustomWebApplication
         Assert.Contains("samesite=strict", refreshCookie, StringComparison.OrdinalIgnoreCase);
     }
 
-    /// <summary>錯誤密碼應回傳 401，且不透露「帳號存在與否」的訊息（防止帳號枚舉）。</summary>
+    /// <summary>錯誤密碼應回傳 401 ProblemDetails，且不透露「帳號存在與否」的訊息（防止帳號枚舉）。</summary>
     [Fact]
     public async Task Login_ReturnsUnauthorized_WhenPasswordIncorrect()
     {

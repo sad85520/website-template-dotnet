@@ -2,19 +2,26 @@ import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import { isAxiosError } from 'axios'
 import { authApi } from '@/api'
-import type { ApiResponse, LoginRequest, LoginResponse, RegisterRequest, UserDto } from '@/types'
+import type {
+  AuthActionResult,
+  LoginRequest,
+  LoginResponse,
+  ProblemDetails,
+  RegisterRequest,
+  UserDto,
+} from '@/types'
 
-// 抽取後端統一 envelope 的錯誤欄位，若 response 不是 ApiResponse（網路錯誤 / CORS / 5xx HTML）
-// 則組一個「看起來一致」的 fail 回傳，caller 就不需要額外 try/catch 去分支。
-function extractApiError<T>(error: unknown): ApiResponse<T> {
-  if (isAxiosError<ApiResponse<T>>(error) && error.response?.data) {
-    const payload = error.response.data
+// 後端已不再回傳信封（見 docs/adr/ADR-004-rfc7807-problem-details.md）：
+// 成功回應直接是資源本體，失敗回應是 RFC 7807 ProblemDetails（application/problem+json）。
+// 這裡把 AxiosError<ProblemDetails> 轉成 AuthActionResult，讓 caller 不需要各自寫 try/catch。
+function extractApiError<T>(error: unknown): AuthActionResult<T> {
+  if (isAxiosError<ProblemDetails>(error) && error.response?.data) {
+    const problem = error.response.data
     return {
       success: false,
       data: null,
-      message: payload.message ?? '請求失敗，請稍後再試',
-      errors: payload.errors ?? null,
-      meta: null,
+      message: problem.detail ?? problem.title ?? '請求失敗，請稍後再試',
+      errors: problem.errors ?? null,
     }
   }
   return {
@@ -22,7 +29,6 @@ function extractApiError<T>(error: unknown): ApiResponse<T> {
     data: null,
     message: '網路錯誤，請稍後再試',
     errors: null,
-    meta: null,
   }
 }
 
@@ -44,18 +50,16 @@ export const useAuthStore = defineStore('auth', () => {
     currentUser.value = null
   }
 
-  async function login(credentials: LoginRequest): Promise<ApiResponse<LoginResponse>> {
+  async function login(credentials: LoginRequest): Promise<AuthActionResult<LoginResponse>> {
     isLoading.value = true
     try {
       const response = await authApi.login(credentials)
-      if (response.data.success && response.data.data) {
-        accessToken.value = response.data.data.accessToken
-        await fetchCurrentUser()
-      }
-      return response.data
+      accessToken.value = response.data.accessToken
+      await fetchCurrentUser()
+      return { success: true, data: response.data, message: null, errors: null }
     } catch (error: unknown) {
       // 沒有 catch 的話 AxiosError 會成為 unhandled rejection，UI 僅能靠全域
-      // interceptor 收拾且 caller 拿不到錯誤訊息。轉為 ApiResponse shape，
+      // interceptor 收拾且 caller 拿不到錯誤訊息。轉為 AuthActionResult，
       // 讓 composable/useAuth 以單一路徑處理 success=false 與 message。
       return extractApiError<LoginResponse>(error)
     } finally {
@@ -63,11 +67,11 @@ export const useAuthStore = defineStore('auth', () => {
     }
   }
 
-  async function register(data: RegisterRequest): Promise<ApiResponse<UserDto>> {
+  async function register(data: RegisterRequest): Promise<AuthActionResult<UserDto>> {
     isLoading.value = true
     try {
       const response = await authApi.register(data)
-      return response.data
+      return { success: true, data: response.data, message: null, errors: null }
     } catch (error: unknown) {
       return extractApiError<UserDto>(error)
     } finally {
@@ -91,9 +95,7 @@ export const useAuthStore = defineStore('auth', () => {
     // currentUser 保持 null；UI 可顯示「資料載入中」或略過個人化區塊。
     try {
       const response = await authApi.getMe()
-      if (response.data.success && response.data.data) {
-        currentUser.value = response.data.data
-      }
+      currentUser.value = response.data
     } catch (error: unknown) {
       currentUser.value = null
       if (import.meta.env.DEV) {
@@ -108,12 +110,9 @@ export const useAuthStore = defineStore('auth', () => {
   async function tryRefreshToken(): Promise<boolean> {
     try {
       const response = await authApi.refresh()
-      if (response.data.success && response.data.data) {
-        accessToken.value = response.data.data.accessToken
-        await fetchCurrentUser()
-        return true
-      }
-      return false
+      accessToken.value = response.data.accessToken
+      await fetchCurrentUser()
+      return true
     } catch {
       clearAuth()
       return false

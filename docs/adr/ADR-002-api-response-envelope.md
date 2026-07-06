@@ -1,8 +1,10 @@
 # ADR-002：API 回應採用 ApiResponse 信封格式
 
-- **狀態**：Accepted
+- **狀態**：Superseded by [ADR-004](./ADR-004-rfc7807-problem-details.md)
 - **日期**：2026-04-12
-- **相關 ADR**：[ADR-001](./ADR-001-module-based-architecture.md)
+- **相關 ADR**：[ADR-001](./ADR-001-module-based-architecture.md)、[ADR-004](./ADR-004-rfc7807-problem-details.md)（取代本決策）
+
+> 本 ADR 的決策已被 [ADR-004](./ADR-004-rfc7807-problem-details.md) 取代：範本改為成功回應直接回傳資源、錯誤回應採用框架原生 RFC 7807 `ProblemDetails`，不再使用本文描述的 `ApiResponse<T>` 信封。以下內容保留作為原始決策脈絡與方案比較的歷史紀錄，程式碼與文件其餘部分請一律以 ADR-004 為準。
 
 ## 背景
 

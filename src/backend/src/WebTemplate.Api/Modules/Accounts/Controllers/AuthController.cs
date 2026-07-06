@@ -2,7 +2,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.Extensions.Options;
-using WebTemplate.Api.Common.Models;
+using WebTemplate.Api.Common.Exceptions;
 using WebTemplate.Api.Modules.Accounts.Models.DTOs;
 using WebTemplate.Api.Modules.Accounts.Models.Settings;
 using WebTemplate.Api.Modules.Accounts.Services.Interfaces;
@@ -62,14 +62,14 @@ public class AuthController(
     [HttpPost("register")]
     [AllowAnonymous]
     [EnableRateLimiting("auth")]
-    [ProducesResponseType(typeof(ApiResponse<UserDto>), StatusCodes.Status201Created)]
-    [ProducesResponseType(typeof(ApiResponse<object>), StatusCodes.Status400BadRequest)]
-    [ProducesResponseType(typeof(ApiResponse<object>), StatusCodes.Status409Conflict)]
+    [ProducesResponseType(typeof(UserDto), StatusCodes.Status201Created)]
+    [ProducesResponseType(typeof(ValidationProblemDetails), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status409Conflict)]
     [ProducesResponseType(StatusCodes.Status429TooManyRequests)]
     public async Task<IActionResult> Register([FromBody] RegisterRequest request, CancellationToken ct)
     {
         var user = await authService.RegisterAsync(request, ct);
-        return StatusCode(StatusCodes.Status201Created, ApiResponse<UserDto>.Created(user));
+        return StatusCode(StatusCodes.Status201Created, user);
     }
 
     /// <summary>以 Email 與密碼登入，成功後發行 access token 並以 HttpOnly cookie 設定 refresh token。</summary>
@@ -79,13 +79,13 @@ public class AuthController(
     [HttpPost("login")]
     [AllowAnonymous]
     [EnableRateLimiting("auth")]
-    [ProducesResponseType(typeof(ApiResponse<LoginResponse>), StatusCodes.Status200OK)]
-    [ProducesResponseType(typeof(ApiResponse<object>), StatusCodes.Status400BadRequest)]
-    [ProducesResponseType(typeof(ApiResponse<object>), StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(typeof(LoginResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ValidationProblemDetails), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status401Unauthorized)]
     [ProducesResponseType(StatusCodes.Status429TooManyRequests)]
     public async Task<IActionResult> Login([FromBody] LoginRequest request, CancellationToken ct)
     {
-        var (user, accessToken, refreshToken) = await authService.LoginAsync(request, ct);
+        var (_, accessToken, refreshToken) = await authService.LoginAsync(request, ct);
 
         Response.Cookies.Append(RefreshTokenCookieName, refreshToken, BuildRefreshCookieOptions());
 
@@ -93,37 +93,37 @@ public class AuthController(
         // 客戶端依此值設定 token 自動更新的計時器。
         var response = new LoginResponse(accessToken, AccessTokenExpiresInSeconds);
 
-        return Ok(ApiResponse<LoginResponse>.Ok(response));
+        return Ok(response);
     }
 
     /// <summary>使用 HttpOnly cookie 中的 refresh token 換取新的 access token，並輪換 refresh token。</summary>
     /// <param name="ct">取消權杖。</param>
-    /// <returns>HTTP 200 OK 含新的 access token；cookie 不存在時回傳 401。</returns>
+    /// <returns>HTTP 200 OK 含新的 access token；cookie 不存在時 401。</returns>
     [HttpPost("refresh")]
     [AllowAnonymous]
-    [ProducesResponseType(typeof(ApiResponse<LoginResponse>), StatusCodes.Status200OK)]
-    [ProducesResponseType(typeof(ApiResponse<object>), StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(typeof(LoginResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status401Unauthorized)]
     public async Task<IActionResult> Refresh(CancellationToken ct)
     {
         var refreshToken = Request.Cookies[RefreshTokenCookieName];
         if (string.IsNullOrEmpty(refreshToken))
-            return Unauthorized(ApiResponse<object>.Fail("Refresh token not found."));
+            throw new AppAuthenticationException("Refresh token not found.");
 
         var (accessToken, newRefreshToken) = await authService.RefreshAsync(refreshToken, ct);
 
         Response.Cookies.Append(RefreshTokenCookieName, newRefreshToken, BuildRefreshCookieOptions());
 
-        return Ok(ApiResponse<LoginResponse>.Ok(new LoginResponse(accessToken, AccessTokenExpiresInSeconds)));
+        return Ok(new LoginResponse(accessToken, AccessTokenExpiresInSeconds));
     }
 
     /// <summary>撤銷 refresh token 並刪除客戶端 cookie，登出目前 session。</summary>
     /// <param name="ct">取消權杖。</param>
-    /// <returns>HTTP 200 OK。</returns>
+    /// <returns>HTTP 204 No Content。</returns>
     [HttpPost("logout")]
     // Authorize 確保只有持有效 access token 的請求才能登出，
     // 防止匿名請求惡意觸發大量 token 撤銷操作。
     [Authorize]
-    [ProducesResponseType(typeof(ApiResponse<object?>), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     public async Task<IActionResult> Logout(CancellationToken ct)
     {
@@ -133,6 +133,6 @@ public class AuthController(
 
         // 無論 token 是否有效，一律刪除 cookie，確保客戶端 session 被清除。
         Response.Cookies.Delete(RefreshTokenCookieName);
-        return Ok(ApiResponse.Ok());
+        return NoContent();
     }
 }

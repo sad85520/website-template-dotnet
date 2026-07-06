@@ -1,0 +1,40 @@
+version: 2
+updates:
+  # 前端 npm 依賴（src/frontend/package.json）
+  - package-ecosystem: "npm"
+    directory: "/src/frontend"
+    schedule:
+      interval: "weekly"
+    groups:
+      # 次要/修補版本自動合併成單一 PR，降低 PR 疲勞；主要版本（如 Vite/Vue Router/Pinia
+      # 的大版本升級）仍各自獨立開 PR，因為通常伴隨 breaking changes 需要人工確認。
+      minor-and-patch:
+        update-types: ["minor", "patch"]
+
+  # 後端 NuGet 依賴（src/backend/**/*.csproj）
+  - package-ecosystem: "nuget"
+    directory: "/src/backend"
+    schedule:
+      interval: "weekly"
+    groups:
+      minor-and-patch:
+        update-types: ["minor", "patch"]
+
+  # GitHub Actions（.github/workflows/*.yml）
+  # CI/CD workflow 全部釘死到完整 commit SHA（見 docs/deployment.md 的供應鏈安全章節），
+  # Dependabot 會依 SHA 更新並保留原本的版本註解格式。
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+
+  # Docker base images（Dockerfile / docker-compose.yml 中的 FROM）
+  - package-ecosystem: "docker"
+    directory: "/src/backend"
+    schedule:
+      interval: "weekly"
+
+  - package-ecosystem: "docker"
+    directory: "/src/frontend"
+    schedule:
+      interval: "weekly"

@@ -1,7 +1,7 @@
 import { useRouter, useRoute } from 'vue-router'
 import { useAuthStore } from '@/stores'
 import { useNotificationStore } from '@/stores'
-import type { ApiResponse, LoginRequest, LoginResponse, RegisterRequest, UserDto } from '@/types'
+import type { AuthActionResult, LoginRequest, LoginResponse, RegisterRequest, UserDto } from '@/types'
 
 // 僅允許同源的相對路徑作為登入後的重導向目標，
 // 防止攻擊者透過 ?redirect=//evil.example 進行 Open Redirect 攻擊。
@@ -20,7 +20,7 @@ export function useAuth() {
   const notificationStore = useNotificationStore()
 
   async function login(credentials: LoginRequest) {
-    // authStore.login 已將 AxiosError 在內部轉為 ApiResponse shape，正常流程不會 throw；
+    // authStore.login 已將 AxiosError 在內部轉為 AuthActionResult，正常流程不會 throw；
     // 但若底層有非預期例外（如 pinia plugin 異常、記憶體不足），仍需在 composable
     // 層兜底避免整個 UI 回傳 unhandled rejection 導致使用者看不到任何錯誤提示。
     try {
@@ -41,12 +41,11 @@ export function useAuth() {
       if (import.meta.env.DEV) {
         console.error('useAuth.login unexpected error:', error)
       }
-      const fallback: ApiResponse<LoginResponse> = {
+      const fallback: AuthActionResult<LoginResponse> = {
         success: false,
         data: null,
         message: '登入失敗，請稍後再試',
         errors: null,
-        meta: null,
       }
       notificationStore.error(fallback.message ?? '登入失敗，請稍後再試')
       return fallback
@@ -69,12 +68,11 @@ export function useAuth() {
       if (import.meta.env.DEV) {
         console.error('useAuth.register unexpected error:', error)
       }
-      const fallback: ApiResponse<UserDto> = {
+      const fallback: AuthActionResult<UserDto> = {
         success: false,
         data: null,
         message: '註冊失敗，請稍後再試',
         errors: null,
-        meta: null,
       }
       notificationStore.error(fallback.message ?? '註冊失敗，請稍後再試')
       return fallback

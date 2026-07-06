@@ -1,8 +1,9 @@
 namespace WebTemplate.Api.Common.Models;
 
 /// <summary>
-/// 純分頁資料結果（不含 HTTP envelope），用於 service 層回傳分頁查詢結果。
-/// Controller 負責將此結果包進 <see cref="ApiResponse{T}"/>，避免服務層洩漏 HTTP 語意。
+/// 純分頁資料結果，用於 service 層回傳分頁查詢結果。
+/// Controller 負責將 <see cref="Items"/> 直接作為回應主體、其餘欄位轉為 <c>X-Pagination-*</c>
+/// 回應標頭，避免服務層洩漏 HTTP 語意。
 /// </summary>
 /// <typeparam name="T">資料項目型別。</typeparam>
 /// <param name="Items">當前頁的資料集合。</param>

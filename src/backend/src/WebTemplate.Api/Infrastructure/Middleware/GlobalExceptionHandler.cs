@@ -1,15 +1,19 @@
 using Microsoft.AspNetCore.Diagnostics;
+using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Mvc;
 using WebTemplate.Api.Common.Exceptions;
-using WebTemplate.Api.Common.Models;
 
 namespace WebTemplate.Api.Infrastructure.Middleware;
 
 /// <summary>
-/// 全域例外處理器，將未捕獲的例外轉換為統一的 <see cref="ApiResponse{T}"/> 格式回應。
-/// 採用白名單策略：僅 <see cref="AppException"/>（業務層刻意拋出、訊息已審核）會原樣揭露訊息給客戶端；
-/// 其他任何框架/第三方例外都會被轉為通用的 500 錯誤，避免 stack trace、SQL、路徑等內部細節意外洩漏。
+/// 全域例外處理器，將未捕獲的例外轉換為 RFC 7807 <see cref="ProblemDetails"/> 格式回應。
+/// 採用白名單策略：僅 <see cref="AppException"/>（業務層刻意拋出、訊息已審核）的訊息會原樣揭露給客戶端，
+/// 寫入 ProblemDetails 的 <c>Detail</c> 欄位；其他任何框架/第三方例外都會被轉為通用的 500 錯誤，
+/// 避免 stack trace、SQL、路徑等內部細節意外洩漏。
 /// </summary>
-public sealed class GlobalExceptionHandler(ILogger<GlobalExceptionHandler> logger) : IExceptionHandler
+public sealed class GlobalExceptionHandler(
+    IProblemDetailsService problemDetailsService,
+    ILogger<GlobalExceptionHandler> logger) : IExceptionHandler
 {
     /// <inheritdoc/>
     public async ValueTask<bool> TryHandleAsync(
@@ -32,7 +36,7 @@ public sealed class GlobalExceptionHandler(ILogger<GlobalExceptionHandler> logge
             return false;
         }
 
-        var (statusCode, message) = exception switch
+        var (statusCode, detail) = exception switch
         {
             // 白名單：僅業務層明確拋出、訊息經過審核的 AppException 可原樣對外揭露。
             AppException appEx => (appEx.StatusCode, appEx.Message),
@@ -41,11 +45,20 @@ public sealed class GlobalExceptionHandler(ILogger<GlobalExceptionHandler> logge
         };
 
         httpContext.Response.StatusCode = statusCode;
-        await httpContext.Response.WriteAsJsonAsync(
-            ApiResponse<object>.Fail(message),
-            cancellationToken);
 
-        // 回傳 true 表示例外已被處理，框架不會再繼續傳播或寫入 ProblemDetails。
-        return true;
+        // IProblemDetailsService 依 builder.Services.AddProblemDetails() 的預設規則
+        // 補齊 Title / Type（對應狀態碼的標準文字與 RFC 9110 說明連結），此處只需提供
+        // Status 與已審核過的 Detail 文字，不自行拼裝 JSON。
+        // 回傳 true 表示例外已被處理，框架不會再繼續傳播。
+        return await problemDetailsService.TryWriteAsync(new ProblemDetailsContext
+        {
+            HttpContext = httpContext,
+            Exception = exception,
+            ProblemDetails = new ProblemDetails
+            {
+                Status = statusCode,
+                Detail = detail,
+            },
+        });
     }
 }

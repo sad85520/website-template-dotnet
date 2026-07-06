@@ -2,20 +2,23 @@ using System.IdentityModel.Tokens.Jwt;
 using System.Security.Cryptography;
 using System.Text;
 using Microsoft.Extensions.Options;
+using Moq;
 using WebTemplate.Api.Modules.Accounts.Models.Entities;
 using WebTemplate.Api.Modules.Accounts.Models.Settings;
-using WebTemplate.Api.Modules.Accounts.Repositories;
+using WebTemplate.Api.Modules.Accounts.Repositories.Interfaces;
 using WebTemplate.Api.Modules.Accounts.Services;
-using WebTemplate.Api.Tests.Helpers;
 
 namespace WebTemplate.Api.Tests.Services;
 
 /// <summary>
 /// <see cref="TokenService"/> 的單元測試，驗證 JWT 產生、refresh token 雜湊儲存及撤銷後狀態。
-/// 使用 InMemory EF Core 資料庫以確保雜湊比對行為真實執行，而非透過 mock 遮蔽。
+/// <see cref="IRefreshTokenRepository"/> 以 Moq 替代，不需要任何資料庫；
+/// 雜湊比對邏輯本身不依賴 DB provider，Moq 足以驗證真實行為。
 /// </summary>
 public class TokenServiceTests
 {
+    private readonly Mock<IRefreshTokenRepository> _refreshTokenRepoMock = new();
+
     /// <summary>建立測試用 <see cref="JwtSettings"/> 選項，使用指定的 secret 字串。</summary>
     /// <param name="secret">JWT 簽章 secret，須夠長以通過 HMAC-SHA256 最低要求。</param>
     /// <returns>包裝好的 <see cref="IOptions{JwtSettings}"/>。</returns>
@@ -47,10 +50,8 @@ public class TokenServiceTests
     [Fact]
     public void GenerateAccessToken_ReturnsValidJwt()
     {
-        using var db = TestDbContextFactory.Create();
         var options = CreateJwtOptions();
-        var refreshTokenRepo = new RefreshTokenRepository(db);
-        var service = new TokenService(refreshTokenRepo, options);
+        var service = new TokenService(_refreshTokenRepoMock.Object, options);
         var user = CreateUser();
 
         var token = service.GenerateAccessToken(user);
@@ -66,17 +67,19 @@ public class TokenServiceTests
         Assert.True(jwt.ValidTo > DateTime.UtcNow);
     }
 
-    /// <summary>CreateRefreshTokenAsync 應將 SHA-256 hash 寫入資料庫，但回傳物件含明文 raw token 以傳給客戶端。</summary>
+    /// <summary>CreateRefreshTokenAsync 應將 SHA-256 hash 寫入 repository，但回傳物件含明文 raw token 以傳給客戶端。</summary>
     [Fact]
     public async Task CreateRefreshTokenAsync_StoresHashNotRawToken()
     {
-        using var db = TestDbContextFactory.Create();
         var options = CreateJwtOptions();
-        var refreshTokenRepo = new RefreshTokenRepository(db);
-        var service = new TokenService(refreshTokenRepo, options);
+        var service = new TokenService(_refreshTokenRepoMock.Object, options);
         var user = CreateUser();
-        db.Users.Add(user);
-        await db.SaveChangesAsync();
+
+        RefreshToken? persisted = null;
+        _refreshTokenRepoMock
+            .Setup(r => r.CreateAsync(It.IsAny<RefreshToken>(), It.IsAny<CancellationToken>()))
+            .Callback<RefreshToken, CancellationToken>((token, _) => persisted = token)
+            .ReturnsAsync((RefreshToken token, CancellationToken _) => token);
 
         var result = await service.CreateRefreshTokenAsync(user.Id);
         var rawToken = result.RawToken;
@@ -85,25 +88,20 @@ public class TokenServiceTests
         // Entity.TokenHash 永遠是資料庫格式（hash），不應等於明文。
         Assert.NotEqual(rawToken, result.Entity.TokenHash);
 
-        var stored = await db.RefreshTokens.FindAsync(result.Entity.Id);
-        Assert.NotNull(stored);
-        Assert.NotEqual(rawToken, stored.TokenHash);
+        Assert.NotNull(persisted);
+        Assert.NotEqual(rawToken, persisted!.TokenHash);
 
         var expectedHash = Convert.ToBase64String(SHA256.HashData(Encoding.UTF8.GetBytes(rawToken)));
-        Assert.Equal(expectedHash, stored.TokenHash);
+        Assert.Equal(expectedHash, persisted.TokenHash);
     }
 
     /// <summary>撤銷後的 token 在 GetActiveRefreshTokenAsync 查詢中應回傳 IsActive=false、IsExpired=true。</summary>
     [Fact]
     public async Task RevokeRefreshTokenAsync_ExpiredToken_IsRejectedByGetActiveRefreshTokenAsync()
     {
-        using var db = TestDbContextFactory.Create();
         var options = CreateJwtOptions();
-        var refreshTokenRepo = new RefreshTokenRepository(db);
-        var service = new TokenService(refreshTokenRepo, options);
+        var service = new TokenService(_refreshTokenRepoMock.Object, options);
         var user = CreateUser();
-        db.Users.Add(user);
-        await db.SaveChangesAsync();
 
         var rawToken = "expired-raw-token";
         var tokenHash = Convert.ToBase64String(SHA256.HashData(Encoding.UTF8.GetBytes(rawToken)));
@@ -114,12 +112,14 @@ public class TokenServiceTests
             ExpiresAt = DateTime.UtcNow.AddDays(-1),
             User = user,
         };
-        db.RefreshTokens.Add(expiredToken);
-        await db.SaveChangesAsync();
+
+        _refreshTokenRepoMock
+            .Setup(r => r.FindActiveByHashAsync(tokenHash, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(expiredToken);
 
         var found = await service.GetActiveRefreshTokenAsync(rawToken);
         Assert.NotNull(found);
-        Assert.False(found.IsActive);
+        Assert.False(found!.IsActive);
         Assert.True(found.IsExpired);
     }
 }

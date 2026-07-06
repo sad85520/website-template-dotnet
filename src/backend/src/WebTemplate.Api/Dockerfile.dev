@@ -7,6 +7,11 @@
 # 如需 prod image（多階段 build + non-root + publish），請用 src/WebTemplate.Api/Dockerfile。
 FROM mcr.microsoft.com/dotnet/sdk:10.0
 
+# dotnet-ef 不隨 SDK 內建，Makefile 的 migrate/migration target
+# （docker compose run --entrypoint dotnet backend ef ...）需要它。
+RUN dotnet tool install --global dotnet-ef
+ENV PATH="$PATH:/root/.dotnet/tools"
+
 WORKDIR /app
 
 EXPOSE 8080

@@ -25,3 +25,14 @@ export interface UserDto {
   role: 'admin' | 'user'
   createdAt: string
 }
+
+// 前端內部使用的動作結果型別：後端已不再回傳信封（見 ADR-004），
+// 這裡是 auth store 呼叫 API 後，把「成功資源／AxiosError 解析出的 ProblemDetails」
+// 統一收斂成一個型別，讓 useAuth / 表單元件不需要各自寫 try/catch 分支。
+// errors 的 key 為欄位名稱、value 為訊息陣列，直接對應後端 ValidationProblemDetails.errors 的格式。
+export interface AuthActionResult<T> {
+  success: boolean
+  data: T | null
+  message: string | null
+  errors: Record<string, string[]> | null
+}

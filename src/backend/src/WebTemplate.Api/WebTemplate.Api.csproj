@@ -19,10 +19,11 @@
     </PackageReference>
     <PackageReference Include="BCrypt.Net-Next" Version="4.0.3" />
     <PackageReference Include="Microsoft.AspNetCore.OpenApi" Version="10.0.0" />
+    <PackageReference Include="Microsoft.OpenApi" Version="2.9.0" />
     <PackageReference Include="NetEscapades.AspNetCore.SecurityHeaders" Version="1.3.1" />
     <PackageReference Include="Scalar.AspNetCore" Version="2.5.0" />
-    <PackageReference Include="Serilog.AspNetCore" Version="9.0.0" />
-    <PackageReference Include="Serilog.Sinks.Console" Version="6.0.0" />
+    <PackageReference Include="Serilog.AspNetCore" Version="10.0.0" />
+    <PackageReference Include="Serilog.Sinks.Console" Version="6.1.1" />
     <!-- CompactJsonFormatter：供 appsettings.Production.json 以 "formatter":
          "Serilog.Formatting.Compact.CompactJsonFormatter, Serilog.Formatting.Compact"
          指定輸出 CLEF（Compact Log Event Format），讓 Loki / CloudWatch / Stackdriver

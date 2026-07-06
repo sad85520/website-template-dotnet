@@ -88,8 +88,9 @@ MSSQL
 
 ```
 Pinia Stores:
-├── auth    ← accessToken, isAuthenticated, login/logout/refresh
-├── user    ← currentUser profile
+├── auth    ← accessToken, currentUser, isAuthenticated, login/logout/refresh
 ├── ui      ← sidebar, theme, globalLoading
 └── notification ← toast 通知佇列
 ```
+
+`currentUser` 由 `auth` store 一併管理（`login` / `tryRefreshToken` 成功後呼叫 `fetchCurrentUser` 寫入），未獨立拆成 `user` store。

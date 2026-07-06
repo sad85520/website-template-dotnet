@@ -1,45 +1,71 @@
 using System.Threading.RateLimiting;
-using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
-using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.AspNetCore.TestHost;
-using Microsoft.Data.Sqlite;
+using Microsoft.Data.SqlClient;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Options;
+using Respawn;
+using Testcontainers.MsSql;
 using WebTemplate.Api.Infrastructure.Data;
 
 namespace WebTemplate.Api.Tests.Integration;
 
 /// <summary>
 /// 整合測試用的 WebApplicationFactory。
-/// 重點調整：
+/// 重點設計：
 /// <list type="bullet">
-///   <item>環境設為 <c>Testing</c>，跳過 Program.cs 中的 auto-migrate。</item>
+///   <item>環境設為 <c>Testing</c>，跳過 Program.cs 中的 auto-migrate（改由本類別自行執行一次
+///         <c>MigrateAsync</c>，確保 EF Core Migration 腳本本身在真實 SQL Server 上也驗證得到）。</item>
 ///   <item>透過 in-memory configuration 注入測試用 JWT 設定，避免真正的 secret 落入 source control。</item>
-///   <item>移除既有的 SQL Server <see cref="AppDbContext"/> 註冊，改用 <b>SQLite in-memory</b> provider：
-///         與 EF Core InMemory 不同，SQLite in-memory 會真正執行 SQL、驗證 unique / FK 等約束，
-///         能抓到 InMemory 放水的違反 constraint 情境（例如 email unique 失敗時拋 DbUpdateException），
-///         對應到 <c>AuthService.IsUniqueViolation</c> 的 409 轉譯路徑是否真的生效。</item>
-///   <item>每個 test class 各自持有一條 <see cref="SqliteConnection"/>；連線存活期 = 資料庫存活期，
-///         確保併行測試互不污染，但同一個 test class 內多個請求能共用同一份資料。</item>
+///   <item>資料庫改用 <b>Testcontainers.MsSql</b> 啟動的真實 SQL Server 容器，而非 SQLite in-memory
+///         ——decimal 精度、collation、rowversion 等行為與 production 的 SQL Server 完全一致，
+///         見 <c>docs/adr/ADR-005-testcontainers-for-integration-tests.md</c>。</item>
+///   <item>本類別是 <see cref="IntegrationTestCollection"/> 的 collection fixture，
+///         每次測試執行只會啟動<b>一個</b>容器並由整個 test collection 共用；
+///         測試之間改用 <see cref="ResetDatabaseAsync"/>（Respawn）清空資料表，
+///         而非每個測試各自起一個容器（容器啟動成本遠高於清資料）。</item>
 /// </list>
 /// </summary>
-public class CustomWebApplicationFactory : WebApplicationFactory<Program>
+public class CustomWebApplicationFactory : WebApplicationFactory<Program>, IAsyncLifetime
 {
-    // SQLite ":memory:" 資料庫的生命週期與 connection 綁定：connection 關閉 = DB 消失。
-    // 因此必須在 factory 層級保留一條長連線，讓 EF Core 從 DI 拿到 scoped connection 時
-    // 仍能命中同一份 in-memory DB；否則每次 AddDbContext 都會開一條新連線，拿到的是空 DB。
-    private readonly SqliteConnection _connection;
+    private readonly MsSqlContainer _container = new MsSqlBuilder("mcr.microsoft.com/mssql/server:2022-latest")
+        .Build();
 
-    public CustomWebApplicationFactory()
+    private Respawner _respawner = null!;
+
+    /// <summary>啟動 SQL Server 容器、套用 EF Core Migration，並建立 Respawn 清資料工具。</summary>
+    public async Task InitializeAsync()
     {
-        _connection = new SqliteConnection("DataSource=:memory:");
-        _connection.Open();
+        await _container.StartAsync();
+
+        // 觸發 Services 存取會依序執行 ConfigureWebHost → Program.cs top-level statements，
+        // 此時 _container 已啟動、GetConnectionString() 可回傳實際映射的 port。
+        using var scope = Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        // 刻意呼叫 MigrateAsync 而非 EnsureCreated：EnsureCreated 直接依 model 產生 schema、
+        // 完全繞過 Migrations/ 資料夾，測試永遠不會發現「migration 檔本身壞掉」這種問題。
+        await db.Database.MigrateAsync();
+
+        await using var respawnConnection = new SqlConnection(_container.GetConnectionString());
+        await respawnConnection.OpenAsync();
+        _respawner = await Respawner.CreateAsync(respawnConnection, new RespawnerOptions
+        {
+            DbAdapter = DbAdapter.SqlServer,
+            SchemasToInclude = ["dbo"],
+            TablesToIgnore = ["__EFMigrationsHistory"],
+        });
+    }
+
+    /// <summary>清空除 Migration 歷史紀錄表以外的所有資料表，讓下一個測試從乾淨狀態開始。</summary>
+    public async Task ResetDatabaseAsync()
+    {
+        await using var connection = new SqlConnection(_container.GetConnectionString());
+        await connection.OpenAsync();
+        await _respawner.ResetAsync(connection);
     }
 
     /// <inheritdoc/>
@@ -62,7 +88,7 @@ public class CustomWebApplicationFactory : WebApplicationFactory<Program>
 
         builder.ConfigureTestServices(services =>
         {
-            // 必須完整移除 Program.cs 註冊的 SQL Server provider 相關服務，
+            // 必須完整移除 Program.cs 註冊的 SQL Server provider 相關服務並重新指向測試容器，
             // 否則 EF Core 10 會拋出「兩個 provider 同時註冊」的 InvalidOperationException。
             // 單純移除 DbContextOptions<AppDbContext> 不夠 —— provider extension 服務仍殘留。
             var efServicesToRemove = services
@@ -77,7 +103,7 @@ public class CustomWebApplicationFactory : WebApplicationFactory<Program>
                 services.Remove(descriptor);
 
             services.AddDbContext<AppDbContext>(options =>
-                options.UseSqlite(_connection));
+                options.UseSqlServer(_container.GetConnectionString()));
 
             // 放寬 rate limiter：正式設定為 auth 10 req/min、api 60 req/min，
             // 整合測試在極短時間內打多次請求會觸發限流，干擾驗證目標。
@@ -108,27 +134,21 @@ public class CustomWebApplicationFactory : WebApplicationFactory<Program>
         });
     }
 
-    // 覆寫 CreateHost 讓 host 啟動後、第一個請求進來前建立 schema。
-    // 不能在 ConfigureTestServices 內 BuildServiceProvider() 手動 EnsureCreated，
-    // 那會在 Program.cs 的 top-level statements 完成前就分岔 DI 容器，
-    // 導致 WebApplicationFactory 誤判「entry point 未建立 IHost」而中斷測試啟動。
-    protected override IHost CreateHost(IHostBuilder builder)
+    /// <inheritdoc/>
+    async Task IAsyncLifetime.DisposeAsync()
     {
-        var host = base.CreateHost(builder);
-        using var scope = host.Services.CreateScope();
-        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-        db.Database.EnsureCreated();
-        return host;
+        await _container.DisposeAsync();
     }
+}
 
-    // WebApplicationFactory 自己就實作 IDisposable；覆寫 Dispose 才有機會關掉
-    // ":memory:" 連線，否則 xUnit 將 factory 作為 test class fixture 重複實例化時，
-    // 每個 class 都會漏一條開著的 SQLite 連線（雖然測試結束後 process 退出會回收，
-    // 但在同一 process 內跑多個整合測試 class 會累積）。
-    protected override void Dispose(bool disposing)
-    {
-        if (disposing)
-            _connection.Dispose();
-        base.Dispose(disposing);
-    }
+/// <summary>
+/// 整合測試的 xUnit collection 定義。所有整合測試類別都應標註
+/// <c>[Collection(IntegrationTestCollection.Name)]</c>，讓它們共用同一個
+/// <see cref="CustomWebApplicationFactory"/> 實例（同一個 SQL Server 容器），
+/// 而不是每個測試類別各自啟動一個容器。
+/// </summary>
+[CollectionDefinition(Name)]
+public sealed class IntegrationTestCollection : ICollectionFixture<CustomWebApplicationFactory>
+{
+    public const string Name = "Integration";
 }

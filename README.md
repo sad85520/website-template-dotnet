@@ -6,7 +6,7 @@
 
 | 層級 | 技術 |
 |------|------|
-| 前端 | Vue 3, TypeScript, Vite, Vue Router 4, Pinia, Tailwind CSS v4, Axios, Zod |
+| 前端 | Vue 3, TypeScript, Vite 8, Vue Router 5, Pinia 3, Tailwind CSS v4, Axios, Zod |
 | 後端 | .NET 10, ASP.NET Core Web API, Entity Framework Core |
 | 資料庫 | MSSQL 2022 |
 | 認證 | JWT + Refresh Token (httpOnly cookie) |
@@ -79,19 +79,19 @@ website-template-dotnet/
 │       │   │               └── JwtSettings.cs   # JWT 設定類別
 │       │   ├── Common/                  # 跨模組共用（不含業務邏輯）
 │       │   │   └── Models/
-│       │   │       └── ApiResponse.cs   # 統一回傳格式 ApiResponse<T>
+│       │   │       └── PagedResult.cs   # 純分頁資料結果（不含 HTTP 語意）
 │       │   ├── Infrastructure/          # 基礎設施（框架層，不含業務邏輯）
 │       │   │   ├── Data/
-│       │   │   │   ├── AppDbContext.cs  # EF Core DbContext
-│       │   │   │   └── Migrations/     # EF Core 自動產生的 Migration 檔
+│       │   │   │   └── AppDbContext.cs  # EF Core DbContext
 │       │   │   ├── Extensions/
 │       │   │   │   └── ServiceCollectionExtensions.cs  # 所有 DI 注冊集中於此
 │       │   │   └── Middleware/
-│       │   │       └── GlobalExceptionHandler.cs       # 全域例外攔截
+│       │   │       └── GlobalExceptionHandler.cs       # 全域例外攔截，轉為 RFC 7807 ProblemDetails
+│       │   ├── Migrations/              # EF Core 自動產生的 Migration 檔（專案根目錄下，dotnet ef 預設輸出位置，不在 Infrastructure/Data/ 之下）
 │       │   └── Controllers/
 │       │       └── HealthController.cs  # 健康檢查（Liveness / Readiness）
 │       └── tests/
-│           └── WebTemplate.Api.Tests/   # xUnit 測試（AuthServiceTests 等）
+│           └── WebTemplate.Api.Tests/   # xUnit 測試（單元測試 Mock Repository；整合測試用 Testcontainers）
 │
 ├── infra/
 │   ├── nginx/                           # Nginx reverse proxy 設定
@@ -125,7 +125,7 @@ make ps            # 查看服務狀態
 ```
 HTTP Request
     ↓
-GlobalExceptionHandler       ← 攔截所有未處理例外，回傳標準格式
+GlobalExceptionHandler       ← 攔截所有未處理例外，轉為 RFC 7807 ProblemDetails
     ↓
 RateLimiter                  ← 速率限制
     ↓
@@ -151,7 +151,7 @@ MSSQL
 | 資料存取 | `Modules/*/Repositories/` | EF Core 查詢、LINQ | 業務判斷 |
 | 資料模型 | `Modules/*/Models/Entities/` | EF Core 對應資料表的實體類別 | DTO |
 | 請求/回應 | `Modules/*/Models/DTOs/` | Request / Response 的 DTO | 資料庫欄位 |
-| 共用 | `Common/Models/` | 跨模組共用（ApiResponse） | 業務邏輯 |
+| 共用 | `Common/Models/` | 跨模組共用（PagedResult 等純資料結構） | 業務邏輯、HTTP 語意 |
 | 基礎設施 | `Infrastructure/` | DB 連線、Middleware、DI 注冊 | 業務邏輯 |
 
 **規則：**
@@ -163,22 +163,29 @@ MSSQL
 
 | 工具 | 位置 | 用途 |
 |------|------|------|
-| `ApiResponse<T>` | `Common/Models/ApiResponse.cs` | 統一回傳格式（Ok / Fail / Paginated） |
+| `PagedResult<T>` | `Common/Models/PagedResult.cs` | Service 層回傳分頁資料的純資料結構（不含 HTTP 語意） |
+| `AppException` 家族 | `Common/Exceptions/AppException.cs` | 業務例外基底類別；`GlobalExceptionHandler` 只會把這些例外的訊息原樣回給客戶端 |
 | `AppDbContext` | `Infrastructure/Data/AppDbContext.cs` | EF Core 資料庫上下文 |
-| `GlobalExceptionHandler` | `Infrastructure/Middleware/` | 自動攔截未處理例外 |
+| `GlobalExceptionHandler` | `Infrastructure/Middleware/` | 自動攔截未處理例外，轉為 RFC 7807 ProblemDetails |
 | `JwtSettings` | `Modules/Accounts/Models/Settings/` | JWT 設定（從 appsettings 取得） |
 | `IUserRepository` | `Modules/Accounts/Repositories/Interfaces/` | 使用者資料存取（範本已實作） |
 | `IAuthService` | `Modules/Accounts/Services/Interfaces/` | JWT 登入、登出、refresh（範本已實作） |
 
 ```csharp
-// 統一回傳格式
-return Ok(ApiResponse<ProductRes>.Ok(product));
-return Ok(ApiResponse<ProductRes>.Fail("查無資料"));
-return BadRequest(ApiResponse<ProductRes>.Fail("名稱為必填"));
+// 成功回應：直接回傳資源，不包信封，依賴 HTTP status code
+return Ok(product);
+return StatusCode(StatusCodes.Status201Created, product);
+
+// 錯誤回應：拋出 AppException 子類別，交給 GlobalExceptionHandler
+// 統一轉譯為 RFC 7807 ProblemDetails，不在 Controller 手動組裝錯誤內容
+if (product is null)
+    throw new AppNotFoundException("Product not found.");
 
 // 注入已實作的服務
 public class MyController(IAuthService auth, IUserRepository users) : ControllerBase { }
 ```
+
+見 [ADR-004](docs/adr/ADR-004-rfc7807-problem-details.md) 了解為何選擇 HTTP 原生格式 + RFC 7807 而非信封格式。
 
 ## 如何擴充這個專案
 
@@ -281,7 +288,7 @@ public class ProductsController(IProductService svc) : ControllerBase
     public async Task<IActionResult> GetAll(CancellationToken ct)
     {
         var products = await svc.GetAllAsync(ct);
-        return Ok(ApiResponse<List<ProductRes>>.Ok(products));
+        return Ok(products);
     }
 }
 ```
@@ -345,8 +352,8 @@ public class ProductServiceTests
 
 | 測試對象 | 測試方式 | 原因 |
 |---------|---------|------|
-| Service | Unit test（Mock Repository） | 業務邏輯在此，直接驗最有價值 |
-| Repository / Controller | 整合測試（`WebApplicationFactory` + Testcontainers.MsSql） | 連真實 SQL Server 容器，確保 EF Core Migration、交易語意、JWT middleware 的整體行為正確；In-memory DB 不支援部分 SQL 語法且無法驗 Migration（見 [ADR-003](docs/adr/ADR-003-testcontainers-for-integration-tests.md)） |
+| Service | Unit test（Mock Repository） | 業務邏輯在此，直接驗最有價值；不依賴任何資料庫 |
+| Repository / Controller | 整合測試（`WebApplicationFactory` + Testcontainers.MsSql） | 連真實 SQL Server 容器，確保 EF Core Migration、交易語意、JWT middleware 的整體行為正確；SQLite 等 in-memory DB 在 decimal 精度、rowversion、collation 上與 SQL Server 行為不同，且無法驗證 Migration 腳本本身（見 [ADR-005](docs/adr/ADR-005-testcontainers-for-integration-tests.md)） |
 
 整合測試需本機或 CI 能啟動 Docker（Testcontainers 自動拉起容器並在測試完成後清理）。
 
@@ -393,7 +400,7 @@ tests/
 | `GET /api/health` | Liveness — 服務是否存活 |
 | `GET /api/health/ready` | Readiness — 資料庫是否可連線 |
 
-> 兩個 image 皆 non-root（backend `app` UID 1000、frontend `nginx`），且 frontend container 對外監聽 8080（k8s Service 仍映射到 80）。生產環境變數（`AllowedHosts` fail-fast、`ConnectionStrings__DefaultConnection`、`Jwt__*`）與 k8s `securityContext` 細節見 [docs/deployment.md](docs/deployment.md)。
+> 兩個 image 皆 non-root（backend `app` UID 1654、frontend `nginx`），且 frontend container 對外監聽 8080（k8s Service 仍映射到 80）。生產環境變數（`AllowedHosts` fail-fast、`ConnectionStrings__DefaultConnection`、`Jwt__*`）與 k8s `securityContext` 細節見 [docs/deployment.md](docs/deployment.md)。
 
 ## API 文件
 

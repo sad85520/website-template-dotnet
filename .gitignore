@@ -39,6 +39,7 @@ desktop.ini
 .idea/
 *.swp
 *.swo
+*.lscache
 
 # ========== Logs ==========
 logs/

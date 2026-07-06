@@ -43,13 +43,15 @@ backend-lint:
 lint: frontend-lint backend-lint
 
 # 執行 EF Core Migration
+# --entrypoint dotnet：dev image 的 ENTRYPOINT 是 `dotnet watch run ...`，
+# 不覆寫的話 compose run 的指令會被當成 watch 的參數而非獨立命令。
 migrate:
-	docker compose run --rm backend dotnet ef database update --project src/WebTemplate.Api
+	docker compose run --rm --entrypoint dotnet backend ef database update --project src/WebTemplate.Api
 
 # 新增 EF Core Migration
 # 用法: make migration NAME=AddUserTable
 migration:
-	docker compose run --rm backend dotnet ef migrations add $(NAME) --project src/WebTemplate.Api
+	docker compose run --rm --entrypoint dotnet backend ef migrations add $(NAME) --project src/WebTemplate.Api
 
 # 查看服務狀態
 ps:

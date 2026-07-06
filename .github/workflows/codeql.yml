@@ -1,0 +1,49 @@
+name: CodeQL
+
+on:
+  push:
+    branches: ["main"]
+  pull_request:
+    branches: ["main"]
+  schedule:
+    # 每週掃描一次，涵蓋 push/PR 未觸發但依賴的 CVE 資料庫本身有更新的情境。
+    - cron: "0 3 * * 1"
+
+jobs:
+  analyze:
+    name: Analyze (${{ matrix.language }})
+    runs-on: ubuntu-latest
+    permissions:
+      # security-events: write 是 CodeQL 上傳掃描結果到 GitHub Security 頁籤的最低需求；
+      # 其餘權限維持預設最小化，與本 repo 其餘 workflow 的最小權限慣例一致。
+      security-events: write
+      contents: read
+
+    strategy:
+      fail-fast: false
+      matrix:
+        # csharp 涵蓋 src/backend；javascript-typescript 涵蓋 src/frontend。
+        language: ["csharp", "javascript-typescript"]
+
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+
+      - uses: actions/setup-dotnet@67a3573c9a986a3f9c594539f4ab511d57bb3ce9 # v4
+        if: matrix.language == 'csharp'
+        with:
+          dotnet-version: "10.0.x"
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@411c4c9a36b3fca4d674f06b6396b2c6d23522c6 # v3
+        with:
+          languages: ${{ matrix.language }}
+
+      - name: Build backend
+        if: matrix.language == 'csharp'
+        working-directory: src/backend
+        run: dotnet build WebTemplate.sln -c Release
+
+      - name: Perform CodeQL Analysis
+        uses: github/codeql-action/analyze@411c4c9a36b3fca4d674f06b6396b2c6d23522c6 # v3
+        with:
+          category: "/language:${{ matrix.language }}"

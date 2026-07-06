@@ -1,9 +1,7 @@
-using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using NetEscapades.AspNetCore.SecurityHeaders;
 using Scalar.AspNetCore;
 using Serilog;
-using WebTemplate.Api.Common.Models;
 using WebTemplate.Api.Infrastructure.Data;
 using WebTemplate.Api.Infrastructure.Extensions;
 using WebTemplate.Api.Infrastructure.Middleware;
@@ -29,27 +27,10 @@ try
     builder.Services.Configure<RouteOptions>(o => o.LowercaseUrls = true);
     builder.Services.AddEndpointsApiExplorer();
 
-    // Model validation 失敗時統一回傳 ApiResponse<object> 信封，而非 ASP.NET Core 預設的
-    // ValidationProblemDetails（RFC 7807）。避免前端同時面對兩種錯誤格式（成功路徑的
-    // ApiResponse + 驗證路徑的 ProblemDetails），統一的錯誤殼讓客戶端錯誤處理邏輯只需一份。
-    builder.Services.Configure<ApiBehaviorOptions>(options =>
-    {
-        options.InvalidModelStateResponseFactory = context =>
-        {
-            var errors = context.ModelState
-                .Where(kvp => kvp.Value?.Errors.Count > 0)
-                .SelectMany(kvp => kvp.Value!.Errors.Select(err => new FieldError
-                {
-                    Field = kvp.Key,
-                    Message = err.ErrorMessage,
-                }))
-                .ToList();
-
-            return new BadRequestObjectResult(
-                ApiResponse<object>.Fail("Validation failed.", errors));
-        };
-    });
-
+    // Model validation 失敗時沿用 ASP.NET Core 預設的 ValidationProblemDetails
+    // （RFC 7807 的擴充：多一個 errors 欄位放欄位層級驗證訊息），不攔截覆寫。
+    // GlobalExceptionHandler 處理的 AppException 也統一走 RFC 7807 ProblemDetails，
+    // 讓成功／驗證失敗／業務例外三條路徑的錯誤 shape 完全一致，前端只需認一種格式。
     // AddProblemDetails 必須與 AddExceptionHandler 搭配，
     // 才能在 handler 未攔截到例外時回退為標準 RFC 7807 Problem Details 格式。
     builder.Services.AddExceptionHandler<GlobalExceptionHandler>();
@@ -108,7 +89,7 @@ try
             })));
 
     // Scalar 專用 CSP：僅開發環境啟用，允許從 jsdelivr CDN 載入 UI 資源。
-    // script-src / style-src 需包含 Self()，因為 Scalar.AspNetCore 會從本機路徑（/scalar/*.js）
+    // script-src / style-src 需包含 Self()，因為 Scalar.AspNetCore 會從本機路徑（/api/scalar/*.js）
     // 提供自帶的 JS/CSS，不是全部走 CDN，缺少 Self() 會被 CSP 攔截。
     if (app.Environment.IsDevelopment())
     {
@@ -131,15 +112,24 @@ try
     // UseExceptionHandler 必須排在所有業務 middleware 之前，
     // 否則後續 middleware 拋出的例外將無法被攔截。
     app.UseExceptionHandler();
+    // UseStatusCodePages 讓「沒有丟例外、但回了 4xx/5xx 空狀態碼」的路徑
+    // （例如 [Authorize] fallback 產生的裸 401/403）也補上 RFC 7807 ProblemDetails body，
+    // 不必每個 controller action 手動組裝錯誤內容。
+    app.UseStatusCodePages();
     app.UseSerilogRequestLogging();
 
     if (app.Environment.IsDevelopment())
     {
-        app.MapOpenApi();
-        app.MapScalarApiReference(options =>
+        // 路徑統一掛在 /api 之下，讓 Nginx 反向代理的 /api/ 規則能轉發到後端
+        // （README 記載的入口是 http://localhost/api/scalar）。
+        // AllowAnonymous：這兩個端點僅存在於開發環境，必須豁免全域 FallbackPolicy
+        // 的「預設拒絕」，否則未帶 JWT 的瀏覽器一律拿到 401 看不到文件。
+        app.MapOpenApi("/api/openapi/{documentName}.json").AllowAnonymous();
+        app.MapScalarApiReference("/api/scalar", options =>
         {
             options.Title = "WebTemplate API";
-        });
+            options.OpenApiRoutePattern = "/api/openapi/{documentName}.json";
+        }).AllowAnonymous();
         app.UseCors();
     }
 
@@ -171,8 +161,8 @@ finally
 // 判斷請求路徑是否為開發用 UI 路徑（Scalar / OpenAPI），用於套用寬鬆 CSP 政策。
 // top-level statements 的 local function 不支援 XML doc comments。
 static bool IsDevUiPath(HttpContext ctx) =>
-    ctx.Request.Path.StartsWithSegments("/scalar") ||
-    ctx.Request.Path.StartsWithSegments("/openapi");
+    ctx.Request.Path.StartsWithSegments("/api/scalar") ||
+    ctx.Request.Path.StartsWithSegments("/api/openapi");
 
 /// <summary>
 /// 應用程式進入點類別，顯式宣告為 <c>public partial</c>，
