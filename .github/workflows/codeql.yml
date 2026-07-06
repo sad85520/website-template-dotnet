@@ -15,8 +15,11 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       # security-events: write 是 CodeQL 上傳掃描結果到 GitHub Security 頁籤的最低需求；
+      # actions: read 是 private repo 上傳結果時查詢 workflow run 資訊所需
+      # （缺少會在 Perform CodeQL Analysis 階段以 Resource not accessible by integration 失敗）；
       # 其餘權限維持預設最小化，與本 repo 其餘 workflow 的最小權限慣例一致。
       security-events: write
+      actions: read
       contents: read
 
     strategy:
