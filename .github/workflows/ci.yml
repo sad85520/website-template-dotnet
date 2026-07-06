@@ -76,6 +76,10 @@ jobs:
         continue-on-error: true
 
   secrets-scan:
+    # Dependabot 觸發的 workflow 拿到的是受限 GITHUB_TOKEN，gitleaks-action 呼叫
+    # API 會 403。Dependabot 只改依賴版號不會引入秘密，跳過不減防護
+    # （push 到 main 與一般 PR 照掃）。
+    if: ${{ github.actor != 'dependabot[bot]' }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
