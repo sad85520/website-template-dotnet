@@ -317,8 +317,9 @@ make migrate
 # 執行所有測試（後端 + 前端）
 make test
 
-# 只跑後端
-docker compose exec backend dotnet test
+# 只跑後端（在 host 執行，需要 .NET SDK；整合測試用 Testcontainers
+# 起真實 SQL Server，所以 Docker 要在運行中）
+dotnet test src/backend/WebTemplate.sln
 
 # 只跑前端
 cd src/frontend && pnpm test

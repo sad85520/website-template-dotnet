@@ -1,0 +1,3 @@
+# 一律以 LF 存放與 checkout，避免 Windows autocrlf 產生 CRLF working tree：
+# bind-mount 進 Linux 容器後會讓 dotnet format 與 shell script 全部踩雷。
+* text=auto eol=lf

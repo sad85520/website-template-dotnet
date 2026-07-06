@@ -24,9 +24,11 @@ clean:
 frontend-test:
 	docker compose run --rm frontend pnpm test
 
-# 執行後端測試
+# 執行後端測試（在 host 執行，需要 .NET SDK 與運行中的 Docker）
+# 整合測試用 Testcontainers 起真實 SQL Server，需要 Docker socket；
+# 在容器內跑會變成 docker-in-docker，模板不做這層複雜度。
 backend-test:
-	docker compose run --rm backend dotnet test
+	dotnet test src/backend/WebTemplate.sln
 
 # 執行所有測試
 test: frontend-test backend-test
@@ -36,8 +38,10 @@ frontend-lint:
 	docker compose run --rm frontend pnpm lint
 
 # 後端 format 檢查（對齊 CI 的 dotnet format --verify-no-changes）
+# --entrypoint dotnet：同 migrate，dev image 的 ENTRYPOINT 是 `dotnet watch run`。
+# 留在容器內跑是刻意的：與 CI 同為 Linux 環境，避開 Windows host 的 CRLF 誤報。
 backend-lint:
-	docker compose run --rm backend dotnet format WebTemplate.sln --verify-no-changes
+	docker compose run --rm --entrypoint dotnet backend format WebTemplate.sln --verify-no-changes
 
 # 所有 lint
 lint: frontend-lint backend-lint
