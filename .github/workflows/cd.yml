@@ -30,7 +30,7 @@ jobs:
       packages: write
 
     steps:
-      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
           # 不在 workspace 留下帶 token 的 .git/config，降低後續 step（例如
           # `docker build` 帶的使用者腳本）竊取 token 的風險。
