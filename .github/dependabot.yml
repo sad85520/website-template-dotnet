@@ -29,8 +29,10 @@ updates:
       interval: "weekly"
 
   # Docker base images（Dockerfile / docker-compose.yml 中的 FROM）
+  # docker ecosystem 不會遞迴掃描子目錄，directory 必須指向 Dockerfile 所在目錄，
+  # 指到 /src/backend 會因找不到 Dockerfile 而整個 job 失敗。
   - package-ecosystem: "docker"
-    directory: "/src/backend"
+    directory: "/src/backend/src/WebTemplate.Api"
     schedule:
       interval: "weekly"
 
