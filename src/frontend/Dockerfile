@@ -12,7 +12,7 @@ COPY . .
 RUN pnpm run build
 
 # ---- Runtime Stage ----
-FROM nginx:1.27-alpine AS runtime
+FROM nginx:1.31-alpine AS runtime
 
 COPY --from=builder /app/dist /usr/share/nginx/html
 COPY nginx.spa.conf /etc/nginx/conf.d/default.conf
