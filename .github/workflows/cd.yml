@@ -62,7 +62,7 @@ jobs:
             type=raw,value=latest
 
       - name: Build & push frontend image
-        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
+        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7.3.0
         with:
           context: ./src/frontend
           file: ./src/frontend/Dockerfile
@@ -71,7 +71,7 @@ jobs:
           labels: ${{ steps.meta-frontend.outputs.labels }}
 
       - name: Build & push backend image
-        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
+        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7.3.0
         with:
           context: ./src/backend
           file: ./src/backend/src/WebTemplate.Api/Dockerfile
